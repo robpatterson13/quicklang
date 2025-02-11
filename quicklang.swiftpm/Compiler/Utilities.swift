@@ -25,8 +25,18 @@ public struct PeekableIterator<Element>: IteratorProtocol {
     }
     
     public mutating func prev() -> Element? {
-        guard index != 0 else { return nil }
-        defer { self.index -= 1}
+        guard index > 0 else { return nil }
+        self.index -= 1
+        return elements[index]
+    }
+    
+    public func peekPrev() -> Element? {
+        guard index > 0 else { return nil }
+        return elements[index - 1]
+    }
+    
+    public func peekNext() -> Element? {
+        guard index < elements.count else { return nil }
         return elements[index]
     }
     

@@ -16,6 +16,17 @@ enum Token {
 
 extension Token {
     
+    static func getValue(of token: Token) -> String {
+        switch token {
+        case .Boolean(let v, _),
+            .Identifier(let v, _),
+            .Number(let v, _),
+            .Keyword(let v, _),
+            .Symbol(let v, _):
+            return v
+        }
+    }
+    
     static func getSourceCodeLocation(of token: Token) -> SourceCodeLocation {
         switch token {
         case .Boolean(_, let l),
@@ -54,6 +65,10 @@ struct SourceCodeLocation {
     let startColumn: Int
     let endLine: Int
     let endColumn: Int
+    
+    func startLineColumnLocation() -> (Int, Int) {
+        return (startLine, startColumn)
+    }
     
     static let dummySourceCodeLocation = SourceCodeLocation(startLine: -1,
                                                             startColumn: -1,

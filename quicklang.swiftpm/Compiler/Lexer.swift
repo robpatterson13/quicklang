@@ -65,8 +65,8 @@ struct Lexer {
                 self.tokens.append(self.tokenizeWord())
             } else if currentChar.isNumber {
                 self.tokens.append(try self.tokenizeNumber())
-            } else if currentChar.isPunctuation {
-                self.tokens.append(self.tokenizePunctuation())
+            } else if currentChar.isPunctuation || currentChar.isSymbol {
+                self.tokens.append(try self.tokenizePunctuation())
             } else if currentChar.isWhitespace {
                 self.consumeWhitespace(char: currentChar)
             } else {
@@ -100,6 +100,8 @@ struct Lexer {
             fallthrough
         case "Int", "Bool", "String":
             fallthrough
+        case "let", "var":
+            fallthrough
         case "if", "else":
             return .Keyword(lexeme, location: locationBuilder.build())
         default:
@@ -127,20 +129,30 @@ struct Lexer {
         return Token.Number(lexeme, location: locationBuilder.build())
     }
     
-    mutating private func tokenizePunctuation() -> Token {
+    mutating private func tokenizePunctuation() throws -> Token {
         
         var locationBuilder = SourceCodeLocationBuilder()
         locationBuilder.startLine = self.location.line
         locationBuilder.startColumn = self.location.column
         var lexeme = String(self.consumeCharacter())
         
-        while let nextChar = self.peekNextCharacter(), nextChar.isPunctuation {
+        switch lexeme {
+        case "+", "=", "<", ">":
+            guard let nextChar = self.peekNextCharacter(),
+                    nextChar == "=" else {
+                break
+            }
+            
             lexeme += String(self.consumeCharacter())
+        default:
+            guard ["-", "*", "(", ")", ":", "{", "}", "!", ","].contains(lexeme) else {
+                throw LexerError.unknownCharacter
+            }
         }
         
         locationBuilder.endLine = self.location.line
         locationBuilder.endColumn = self.location.column
-        return Token.Number(lexeme, location: locationBuilder.build())
+        return Token.Symbol(lexeme, location: locationBuilder.build())
     }
 }
 

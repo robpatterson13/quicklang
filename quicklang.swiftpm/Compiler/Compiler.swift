@@ -8,8 +8,22 @@
 struct Compiler {
     var lexer: Lexer
     
+    let program = "\nabc(and, adne, wid, wir)"
+    
     init() {
-        self.lexer = Lexer(for: "if true { return 2 } else { x return 30; \n}")
-        print(try! lexer.tokenize())
+        self.lexer = Lexer(for: program)
+        let lexed = try! lexer.tokenize()
+        print(lexed)
+        print("\n\n")
+        var parser = Parser(for: lexed)
+        
+        do {
+            print(try parser.beginParse())
+        } catch let e as Parser.ParseError {
+            print("\nError while parsing: \n\(program)\n\n")
+            print(e.message)
+        } catch {
+            print(error)
+        }
     }
 }
