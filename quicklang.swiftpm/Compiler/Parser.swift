@@ -129,7 +129,7 @@ struct Parser {
     }
     
     //\
-    //  responsible for parsing the braced body of functions
+    //  responsible for parsing a braced block (ex. function bodies, if statements)
     //\
     mutating private func parseBlock() throws -> [any BlockLevelNode] {
         
