@@ -1,72 +1,100 @@
 //
 //  AST.swift
-//  swift-student-challenge-2025
+//  quicklang
 //
-//  Created by Rob Patterson on 2/5/25.
+//  Created by Rob Patterson on 2/11/25.
 //
-
-typealias Binding = (name: String, body: Expression)
 
 struct Program {
-    var nodes: [ASTNode]
+    var sections: [TopLevelNode]
 }
 
-protocol ASTNode {
-    
+protocol FunctionLevelNode { }
+protocol TopLevelNode: FunctionLevelNode { }
+
+protocol SequenceableNode { }
+
+protocol ExpressionNode { }
+
+protocol DefinitionNode: TopLevelNode, SequenceableNode {
+    var name: String { get }
+    var expression: any ExpressionNode { get }
 }
 
-enum PrimType {
-    case TInt
-    case TBool
-    case TString
+protocol StatementNode { }
+
+struct IdentifierExpression: ExpressionNode {
+    var name: String
 }
 
-indirect enum Expression: ASTNode {
-    
-    // literals
-    case NumberLiteral(value: Int)
-    case BooleanLiteral(value: Bool)
-    
-    // compound expressions
-    case UnaryOperation(op: UnaryOperator, lhs: Expression, rhs: Expression)
-    case BinaryOperation(op: BinaryOperator, lhs: Expression, rhs: Expression)
-    
-    case FunctionApplication(name: String, arguments: [Expression])
+struct BooleanExpression: ExpressionNode {
+    var value: Bool
 }
 
-enum BinaryOperator {
-    
-    // arithmetic operators
-    case Add
-    case Sub
-    case Mul
-    
-    // boolean operators
-    case And
-    case Or
+struct NumberExpression: ExpressionNode {
+    var value: Int
 }
 
 enum UnaryOperator {
-    
-    // arithmetic operators
-    case Not
-    
-    // boolean operators
-    case Neg
+    case not
+    case neg
 }
 
-enum Statement: ASTNode {
-    
-    case IfStatement(cond: ASTNode, thn: [ASTNode], els: [ASTNode])
-    
-    case ReturnStatement(value: Expression)
+struct UnaryOperation: ExpressionNode {
+    var op: UnaryOperator
+    var expression: any ExpressionNode
 }
 
-enum Definition: ASTNode {
+enum BinaryOperator {
+    case plus
+    case minus
+    case times
     
-    case VarDefinition(binding: Binding)
-    case LetDefinition(binding: Binding)
+    case and
+    case or
+}
+
+struct BinaryOperation: ExpressionNode {
+    var op: BinaryOperator
+    var lhs, rhs: ExpressionNode
+}
+
+struct LetDefinition: DefinitionNode  {
+    var name: String
+    var expression: any ExpressionNode
+}
+
+struct VarDefinition: DefinitionNode {
+    var name: String
+    var expression: any ExpressionNode
+}
+
+enum TypeName {
+    case Bool
+    case Int
+    case String
+}
+
+struct FuncDefinition: TopLevelNode {
+    typealias Parameter = (name: String, type: TypeName)
     
-    typealias Parameters = [(name: String, type: PrimType)]
-    case FunctionDefinition(name: String, parameters: Parameters, body: [ASTNode])
+    var name: String
+    var type: TypeName
+    var parameters: [Parameter]
+    var body: [any FunctionLevelNode]
+}
+
+struct FuncApplication: ExpressionNode, TopLevelNode {
+    var name: String
+    var arguments: [any ExpressionNode]
+}
+
+struct IfStatement: StatementNode, FunctionLevelNode {
+    var condition: any ExpressionNode
+    var thenBranch: [any StatementNode]
+    var elseBranch: [any StatementNode]
+}
+
+struct ReturnStatement: StatementNode, FunctionLevelNode {
+    var expression: any ExpressionNode
 }

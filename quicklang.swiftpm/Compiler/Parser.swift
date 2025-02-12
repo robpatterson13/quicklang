@@ -19,15 +19,15 @@ struct Parser {
     //
     //   loops on calls to parse if more tokens
     //\
-    mutating func beginParse() throws -> [ASTNode] {
+    mutating func beginParse() throws -> Program {
         
-        var nodes: [ASTNode] = []
+        var nodes: [any TopLevelNode] = []
         
         while !tokens.isEmpty() {
             nodes.append(try parse())
         }
         
-        return nodes
+        return Program(sections: nodes)
     }
     
     //\
@@ -37,7 +37,7 @@ struct Parser {
     //
     //   you should never expect to parse a literal!
     //\
-    mutating private func parse() throws -> ASTNode {
+    mutating private func parse() throws -> TopLevelNode {
         
         guard let currentToken = tokens.next() else {
             let message = """
@@ -91,7 +91,11 @@ struct Parser {
         }
     }
     
-    mutating private func parseFunctionDefinition() throws -> Definition {
+    //\
+    //  responsible for parsing the function identifier and signature
+    //   passes off calls for function params and body
+    //\
+    mutating private func parseFunctionDefinition() throws -> FuncDefinition {
         
         let identifier = try self.parseIdentifier()
         
@@ -108,12 +112,28 @@ struct Parser {
         
         let parameters = try self.parseFunctionParameters()
         
-        return .FunctionDefinition(name: identifier, parameters: parameters, body: try parseFunctionBody())
+        guard let hopefullyArrow = tokens.next(),
+              hopefullyArrow == .Symbol("->", location: SourceCodeLocation.dummySourceCodeLocation) else {
+            
+            let (line, column) = Token.getSourceCodeLocation(of: tokens.prev()!).startLineColumnLocation()
+            let message = """
+                          Expected '->' at line \(line), column \(column)
+                          to begin signature of "\(identifier)"
+                          """
+            throw ParseError(message: message, errorType: .expectedToken)
+        }
+        
+        let typeName = try self.parseType()
+        
+        return FuncDefinition(name: identifier, type: typeName, parameters: parameters, body: try parseFunctionBody())
     }
     
-    mutating private func parseFunctionBody() throws -> [ASTNode] {
+    //\
+    //  responsible for parsing the braced body of functions
+    //\
+    mutating private func parseFunctionBody() throws -> [any FunctionLevelNode] {
         
-        var bodyParts: [ASTNode] = []
+        var bodyParts: [any FunctionLevelNode] = []
         
         guard let hopefullyOpenBrace = tokens.next(),
               hopefullyOpenBrace == .Symbol("{", location: SourceCodeLocation.dummySourceCodeLocation) else {
@@ -150,7 +170,10 @@ struct Parser {
         return bodyParts
     }
     
-    mutating private func parseFunctionBodyPart() throws -> ASTNode? {
+    //\
+    //  responsible for parsing body parts (statements, definitions, etc.)
+    //\
+    mutating private func parseFunctionBodyPart() throws -> FunctionLevelNode? {
         
         guard let currentToken = tokens.peekNext() else {
             let (line, _) = Token.getSourceCodeLocation(of: tokens.prev()!).startLineColumnLocation()
@@ -172,7 +195,7 @@ struct Parser {
             
         case .Keyword("return", _):
             let _ = tokens.next()
-            return Statement.ReturnStatement(value: try parseExpression())
+            return ReturnStatement(expression: try parseExpression())
             
         case .Symbol("}", _):
             let _ = tokens.next()
@@ -218,7 +241,7 @@ struct Parser {
     //   is only called right after a push onto
     //   tokens
     //\
-    mutating private func parseDefinition() throws -> Definition {
+    mutating private func parseDefinition() throws -> any DefinitionNode {
         
         let keyword = tokens.next()!
         
@@ -250,9 +273,9 @@ struct Parser {
         
         switch keyword {
         case .Keyword("var", _):
-            return .VarDefinition(binding: (identifier, boundExpression))
+            return VarDefinition(name: identifier, expression: boundExpression)
         case .Keyword("let", _):
-            return .LetDefinition(binding: (identifier, boundExpression))
+            return LetDefinition(name: identifier, expression: boundExpression)
         default:
             let (line, column) = Token.getSourceCodeLocation(of: keyword).startLineColumnLocation()
             let message = """
@@ -264,9 +287,9 @@ struct Parser {
         }
     }
     
-    mutating private func parseExpression() throws -> Expression {
+    mutating private func parseExpression() throws -> any ExpressionNode {
         tokens.next()
-        return .BooleanLiteral(value: true)
+        return BooleanExpression(value: true)
     }
     
     //\
@@ -300,9 +323,9 @@ struct Parser {
     //  parses function parameters; comes in a tuple of
     //   identifier and PrimType
     //\
-    mutating private func parseFunctionParameters() throws -> Definition.Parameters {
+    mutating private func parseFunctionParameters() throws -> [FuncDefinition.Parameter] {
         
-        var parameters: Definition.Parameters = []
+        var parameters: [FuncDefinition.Parameter] = []
         
         while let nextToken = tokens.peekNext(),
                 nextToken != .Symbol(")", location: SourceCodeLocation.dummySourceCodeLocation) {
@@ -346,7 +369,7 @@ struct Parser {
     //  returns individual arguments of a function application;
     //   ensures that arguments are expressions
     //\
-    mutating private func parseFunctionApplicationArgument() throws -> Expression {
+    mutating private func parseFunctionApplicationArgument() throws -> any ExpressionNode {
         
         guard let nextToken = tokens.peekNext() else {
             let (line, column) = Token.getSourceCodeLocation(of: tokens.prev()!).startLineColumnLocation()
@@ -371,7 +394,10 @@ struct Parser {
         }
     }
     
-    mutating private func parseFunctionApplication() throws -> Expression {
+    //\
+    //  parses a function application (ex. id(param1, param2, ...))
+    //\
+    mutating private func parseFunctionApplication() throws -> FuncApplication {
         
         let identifier = try parseIdentifier()
         
@@ -383,7 +409,7 @@ struct Parser {
                              errorType: .expectedFunctionApplication)
         }
         
-        var expressions: [Expression] = []
+        var expressions: [any ExpressionNode] = []
         
         while let nextToken = tokens.peekNext(),
                 nextToken != .Symbol(")", location: SourceCodeLocation.dummySourceCodeLocation) {
@@ -408,10 +434,14 @@ struct Parser {
                              errorType: .expectedClosingParen)
         }
         
-        return .FunctionApplication(name: identifier, arguments: expressions)
+        return FuncApplication(name: identifier, arguments: expressions)
     }
     
-    mutating private func parseType() throws -> PrimType {
+    //\
+    //  parses a type identifier; used for parameter declarations in
+    //   function signatures
+    //\
+    mutating private func parseType() throws -> TypeName {
         
         guard let nextToken = tokens.next() else {
             
@@ -427,11 +457,11 @@ struct Parser {
         switch nextToken {
         case .Keyword(let kw, _):
             if kw == "Int" {
-                return .TInt
+                return .Int
             } else if kw == "Bool" {
-                return .TBool
+                return .Bool
             } else if kw == "String" {
-                return .TString
+                return .String
             } else {
                 fallthrough
             }

@@ -137,6 +137,11 @@ struct Lexer {
         var lexeme = String(self.consumeCharacter())
         
         switch lexeme {
+        case "-":
+            if self.peekNextCharacter() == ">" {
+                lexeme += String(self.consumeCharacter())
+            }
+            fallthrough
         case "+", "=", "<", ">":
             guard let nextChar = self.peekNextCharacter(),
                     nextChar == "=" else {
@@ -145,7 +150,7 @@ struct Lexer {
             
             lexeme += String(self.consumeCharacter())
         default:
-            guard ["-", "*", "(", ")", ":", "{", "}", "!", ","].contains(lexeme) else {
+            guard ["*", "(", ")", ":", "{", "}", "!", ","].contains(lexeme) else {
                 throw LexerError.unknownCharacter
             }
         }

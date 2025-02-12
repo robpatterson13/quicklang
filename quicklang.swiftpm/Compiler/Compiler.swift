@@ -8,7 +8,7 @@
 struct Compiler {
     var lexer: Lexer
     
-    let program = "\nabc(and, adne, wid, wir)"
+    let program = "\nfunc abc(param1: Int) -> Bool { return 42 }"
     
     init() {
         self.lexer = Lexer(for: program)

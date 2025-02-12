@@ -44,3 +44,18 @@ public struct PeekableIterator<Element>: IteratorProtocol {
         return index == elements.count
     }
 }
+
+extension Array {
+    
+    public func andmap<E>(_ transform: (Self.Element) throws(E) -> Bool) throws(E) -> Bool where E : Error {
+        let results = try self.map(transform)
+        
+        for result in results {
+            if !result {
+                return false
+            }
+        }
+        
+        return true
+    }
+}
