@@ -150,7 +150,7 @@ struct Lexer {
             
             lexeme += String(self.consumeCharacter())
         default:
-            guard ["*", "(", ")", ":", "{", "}", "!", ","].contains(lexeme) else {
+            guard ["*", "(", ")", ":", "{", "}", "!", ",", ";"].contains(lexeme) else {
                 throw LexerError.unknownCharacter
             }
         }

@@ -125,15 +125,15 @@ struct Parser {
         
         let typeName = try self.parseType()
         
-        return FuncDefinition(name: identifier, type: typeName, parameters: parameters, body: try parseFunctionBody())
+        return FuncDefinition(name: identifier, type: typeName, parameters: parameters, body: try parseBlock())
     }
     
     //\
     //  responsible for parsing the braced body of functions
     //\
-    mutating private func parseFunctionBody() throws -> [any FunctionLevelNode] {
+    mutating private func parseBlock() throws -> [any BlockLevelNode] {
         
-        var bodyParts: [any FunctionLevelNode] = []
+        var bodyParts: [any BlockLevelNode] = []
         
         guard let hopefullyOpenBrace = tokens.next(),
               hopefullyOpenBrace == .Symbol("{", location: SourceCodeLocation.dummySourceCodeLocation) else {
@@ -141,7 +141,7 @@ struct Parser {
             let (line, column) = Token.getSourceCodeLocation(of: tokens.prev()!).startLineColumnLocation()
             let message = """
                           Expected '{' at line \(line), column \(column)
-                          to begin function body definition
+                          to begin block definition
                           """
             throw ParseError(message: message, errorType: .expectedClosingBrace)
         }
@@ -161,7 +161,7 @@ struct Parser {
             let (openingLine, openingColumn) = Token.getSourceCodeLocation(of: hopefullyOpenBrace).startLineColumnLocation()
             let message = """
                           Expected '}' at line \(line), column \(column)
-                          to close function definition started at line
+                          to close block definition started at line
                           \(openingLine), column \(openingColumn)
                           """
             throw ParseError(message: message, errorType: .expectedClosingBrace)
@@ -171,9 +171,42 @@ struct Parser {
     }
     
     //\
+    //  responsible for parsing if statements
+    //\
+    mutating private func parseIfStatement() throws -> IfStatement {
+        
+        let keyword = tokens.next()!
+        
+        guard (tokens.peekNext() != nil) else {
+            let (line, column) = Token.getSourceCodeLocation(of: tokens.prev()!).startLineColumnLocation()
+            let message = """
+                          Expected condition for if statement at line \(line), column \(column)"
+                          """
+            throw ParseError(message: message, errorType: .expectedToken)
+        }
+        
+        let condition = try parseExpression()
+        
+        let thnBlock = try parseBlock()
+        
+        guard let hopefullyElse = tokens.next(),
+              hopefullyElse == .Keyword("else", location: SourceCodeLocation.dummySourceCodeLocation) else {
+            let (line, column) = Token.getSourceCodeLocation(of: keyword).startLineColumnLocation()
+            let message = """
+                          Expected else branch of if statement at line \(line), column \(column)"
+                          """
+            throw ParseError(message: message, errorType: .expectedToken)
+        }
+        
+        let elsBlock = try parseBlock()
+        
+        return IfStatement(condition: condition, thenBranch: thnBlock, elseBranch: elsBlock)
+    }
+    
+    //\
     //  responsible for parsing body parts (statements, definitions, etc.)
     //\
-    mutating private func parseFunctionBodyPart() throws -> FunctionLevelNode? {
+    mutating private func parseFunctionBodyPart() throws -> BlockLevelNode? {
         
         guard let currentToken = tokens.peekNext() else {
             let (line, _) = Token.getSourceCodeLocation(of: tokens.prev()!).startLineColumnLocation()
@@ -186,16 +219,17 @@ struct Parser {
         switch currentToken {
         // the interesting cases!
         case .Keyword("var", _), .Keyword("let", _):
-            tokens.push(currentToken)
             return try parseDefinition()
             
         case .Identifier(_, _):
-            tokens.push(currentToken)
             return try parseFunctionApplication()
             
         case .Keyword("return", _):
             let _ = tokens.next()
             return ReturnStatement(expression: try parseExpression())
+            
+        case .Keyword("if", _):
+            return try parseIfStatement()
             
         case .Symbol("}", _):
             let _ = tokens.next()

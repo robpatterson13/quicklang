@@ -9,8 +9,8 @@ struct Program {
     var sections: [TopLevelNode]
 }
 
-protocol FunctionLevelNode { }
-protocol TopLevelNode: FunctionLevelNode { }
+protocol BlockLevelNode { }
+protocol TopLevelNode: BlockLevelNode { }
 
 protocol SequenceableNode { }
 
@@ -81,7 +81,7 @@ struct FuncDefinition: TopLevelNode {
     var name: String
     var type: TypeName
     var parameters: [Parameter]
-    var body: [any FunctionLevelNode]
+    var body: [any BlockLevelNode]
 }
 
 struct FuncApplication: ExpressionNode, TopLevelNode {
@@ -89,12 +89,12 @@ struct FuncApplication: ExpressionNode, TopLevelNode {
     var arguments: [any ExpressionNode]
 }
 
-struct IfStatement: StatementNode, FunctionLevelNode {
+struct IfStatement: StatementNode, BlockLevelNode {
     var condition: any ExpressionNode
-    var thenBranch: [any StatementNode]
-    var elseBranch: [any StatementNode]
+    var thenBranch: [any BlockLevelNode]
+    var elseBranch: [any BlockLevelNode]
 }
 
-struct ReturnStatement: StatementNode, FunctionLevelNode {
+struct ReturnStatement: StatementNode, BlockLevelNode {
     var expression: any ExpressionNode
 }

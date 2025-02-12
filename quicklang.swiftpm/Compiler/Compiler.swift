@@ -8,7 +8,18 @@
 struct Compiler {
     var lexer: Lexer
     
-    let program = "\nfunc abc(param1: Int) -> Bool { return 42 }"
+    let program = """
+                  func abc(param1: Int) -> Bool { 
+                    if 32 { 
+                        return 32 
+                    } else { 
+                        return 31 
+                    }
+                  }
+                  let value = 32;
+                  var value2 = true;
+                  abc(value)
+                  """
     
     init() {
         self.lexer = Lexer(for: program)
