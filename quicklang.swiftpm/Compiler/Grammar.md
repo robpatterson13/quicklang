@@ -1,6 +1,6 @@
 program ::= \<func-def\> \<program\> ... \
           | \<def\> \<program\> ... \
-          | \<expr\>
+          | \<func-call\>`;`
 
 atom ::= \<num\> \
        | \<bool\> \
@@ -9,13 +9,15 @@ atom ::= \<num\> \
 expr ::= \<atom\> \
        | `(`\<unary-op\>\<expr\>`)` \
        | \<atom\> \<binary-op\> \<expr\> \
-       | \<identifier\>`(`\<expr\> ...`)`
+       | \<func-call\>
        
 stmt ::= `if` \<expr\> `{` \<stmt-or-def\> ...+ `}` `else` `{` \<stmt-or-def\> ...+ `}` \
        | `return` \<expr\>`;`
        
 def ::= `let` \<identifier\> `=` \<expr\>`;` \
       | `var` \<identifier\> `=` \<expr\>`;`
+      
+func-call ::= \<identifier\>`(`\<expr\> ...`)`
       
 func-def ::= `func` \<identifier\>`(`\<func-param\> ...`)` `->` \<type\> `{` \<stmt-or-def\> ...+ `}`
       

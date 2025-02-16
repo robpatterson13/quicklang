@@ -57,7 +57,17 @@ struct Parser {
             
         case .Identifier(_, _):
             tokens.push(currentToken)
-            return try parseFunctionApplication()
+            let val = try parseFunctionApplication()
+            
+            guard let hopefullySemicolon = tokens.next(),
+                  Token.getValue(of: hopefullySemicolon) == ";" else {
+                let (line, column) = Token.getSourceCodeLocation(of: tokens.prev()!).startLineColumnLocation()
+                let message = """
+                              Expected ';' to end top-level function call at line \(line), column \(column)
+                              """
+                throw ParseError(message: message, errorType: .unexpectedBoolean)
+            }
+            return val
             
         // the uninteresting cases
         case .Boolean(let val, _):
