@@ -39,6 +39,27 @@ extension Token {
     }
 }
 
+extension Token {
+    
+    static func isAtomic(_ token: Token) -> Bool {
+        switch token {
+        case .Boolean, .Identifier, .Number:
+            return true
+        default:
+            return false
+        }
+    }
+    
+    static func isOp(_ token: Token) -> Bool {
+        switch token {
+        case let .Symbol(sym, _):
+            return ["!", "+", "-", "*", "&&", "||"].contains { $0 == sym }
+        default:
+            return false
+        }
+    }
+}
+
 struct SourceCodeLocationBuilder {
     
     var startLine: Int?

@@ -19,7 +19,7 @@ struct Parser {
     //
     //   loops on calls to parse if more tokens
     //\
-    mutating func beginParse() throws -> Program {
+    mutating func beginParse() throws -> TopLevel {
         
         var nodes: [any TopLevelNode] = []
         
@@ -27,7 +27,7 @@ struct Parser {
             nodes.append(try parse())
         }
         
-        return Program(sections: nodes)
+        return TopLevel(sections: nodes)
     }
     
     //\
@@ -112,6 +112,17 @@ struct Parser {
         
         let parameters = try self.parseFunctionParameters()
         
+        guard let hopefullyOpenParen = tokens.next(),
+              hopefullyOpenParen == .Symbol(")", location: SourceCodeLocation.dummySourceCodeLocation) else {
+            
+            let (line, column) = Token.getSourceCodeLocation(of: tokens.prev()!).startLineColumnLocation()
+            let message = """
+                          Expected ')' at line \(line), column \(column)
+                          to close signature of "\(identifier)"
+                          """
+            throw ParseError(message: message, errorType: .expectedToken)
+        }
+        
         guard let hopefullyArrow = tokens.next(),
               hopefullyArrow == .Symbol("->", location: SourceCodeLocation.dummySourceCodeLocation) else {
             
@@ -149,7 +160,7 @@ struct Parser {
         while let nextToken = tokens.peekNext(),
               nextToken != .Symbol("}", location: SourceCodeLocation.dummySourceCodeLocation) {
             
-            if let bodyPart = try parseFunctionBodyPart() {
+            if let bodyPart = try parseBlockBodyPart() {
                 bodyParts.append(bodyPart)
             }
         }
@@ -177,7 +188,8 @@ struct Parser {
         
         let keyword = tokens.next()!
         
-        guard (tokens.peekNext() != nil) else {
+        guard let hopefullyParen = tokens.next(),
+              hopefullyParen == .Symbol("(", location: SourceCodeLocation.dummySourceCodeLocation) else {
             let (line, column) = Token.getSourceCodeLocation(of: tokens.prev()!).startLineColumnLocation()
             let message = """
                           Expected condition for if statement at line \(line), column \(column)"
@@ -185,7 +197,16 @@ struct Parser {
             throw ParseError(message: message, errorType: .expectedToken)
         }
         
-        let condition = try parseExpression()
+        let condition = try parseExpression(until: ")", min: 0)
+        
+        guard let hopefullyCloseParen = tokens.next(),
+              hopefullyCloseParen == .Symbol(")", location: SourceCodeLocation.dummySourceCodeLocation) else {
+            let (line, column) = Token.getSourceCodeLocation(of: tokens.prev()!).startLineColumnLocation()
+            let message = """
+                          Expected ')' to close condition at line \(line), column \(column)"
+                          """
+            throw ParseError(message: message, errorType: .expectedToken)
+        }
         
         let thnBlock = try parseBlock()
         
@@ -204,9 +225,29 @@ struct Parser {
     }
     
     //\
-    //  responsible for parsing body parts (statements, definitions, etc.)
+    //  parses a return statement
     //\
-    mutating private func parseFunctionBodyPart() throws -> BlockLevelNode? {
+    mutating private func parseReturnStatement() throws -> ReturnStatement {
+        
+        let node = ReturnStatement(expression: try parseExpression(until: ";", min: 0))
+        
+        guard let hopefullySemicolon = tokens.next(),
+              Token.getValue(of: hopefullySemicolon) == ";" else {
+            let (line, column) = Token.getSourceCodeLocation(of: tokens.prev()!).startLineColumnLocation()
+            let message = """
+                          Expected ';' at line \(line), column \(column)
+                          to end return statement"
+                          """
+            throw ParseError(message: message, errorType: .expectedToken)
+        }
+        
+        return node
+    }
+    
+    //\
+    //  responsible for parsing block level parts (statements, definitions, etc.)
+    //\
+    mutating private func parseBlockBodyPart() throws -> BlockLevelNode? {
         
         guard let currentToken = tokens.peekNext() else {
             let (line, _) = Token.getSourceCodeLocation(of: tokens.prev()!).startLineColumnLocation()
@@ -226,7 +267,7 @@ struct Parser {
             
         case .Keyword("return", _):
             let _ = tokens.next()
-            return ReturnStatement(expression: try parseExpression())
+            return try parseReturnStatement()
             
         case .Keyword("if", _):
             return try parseIfStatement()
@@ -292,10 +333,10 @@ struct Parser {
             throw ParseError(message: message, errorType: .expectedToken)
         }
         
-        let boundExpression = try parseExpression()
+        let boundExpression = try parseExpression(until: ";", min: 0)
         
         guard let hopefullySemicolon = tokens.next(),
-              hopefullySemicolon == .Symbol(";", location: SourceCodeLocation.dummySourceCodeLocation) else {
+              Token.getValue(of: hopefullySemicolon) == ";" else {
             
             let (line, column) = Token.getSourceCodeLocation(of: tokens.prev()!).startLineColumnLocation()
             let message = """
@@ -321,9 +362,96 @@ struct Parser {
         }
     }
     
-    mutating private func parseExpression() throws -> any ExpressionNode {
-        tokens.next()
-        return BooleanExpression(value: true)
+    //\
+    //  parses an atomic expression (identifier, function call, boolean, number)
+    //\
+    mutating private func parseAtomic(_ token: Token) throws -> any ExpressionNode {
+        switch token {
+        case let .Identifier(id, _):
+            if let maybeParen = tokens.peekNext(),
+               Token.getValue(of: maybeParen) == "(" {
+                tokens.push(token)
+                return try parseFunctionApplication()
+            } else {
+                return IdentifierExpression(name: id)
+            }
+            
+        case let .Number(n, _):
+            return NumberExpression(value: Int(n)!)
+            
+        case let .Boolean(b, _):
+            return BooleanExpression(value: Bool(b)!)
+            
+        default:
+            let (line, column) = Token.getSourceCodeLocation(of: tokens.prev()!).startLineColumnLocation()
+            let message = """
+                          Expected an atom at line \(line), column \(column)
+                          """
+            throw ParseError(message: message, errorType: .expectedAtomic)
+        }
+    }
+    
+    //\
+    //  parses an expression.
+    //
+    //  infinite thank you to https://matklad.github.io/2020/04/13/simple-but-powerful-pratt-parsing.html
+    //\
+    mutating private func parseExpression(until end: String, min: Int) throws -> any ExpressionNode {
+        guard let lhs = tokens.next(),
+              Token.isAtomic(lhs) else {
+            let (line, column) = Token.getSourceCodeLocation(of: tokens.prev()!).startLineColumnLocation()
+            let message = """
+                          Expected expression at line \(line), column \(column)
+                          """
+            throw ParseError(message: message, errorType: .expectedExpression)
+        }
+        
+        var lhsNode = try parseAtomic(lhs)
+        
+        while true {
+            if let maybeEnd = tokens.peekNext(),
+               Token.getValue(of: maybeEnd) == end {
+                break
+            }
+            
+            guard let op = tokens.peekNext(),
+                  Token.isOp(op) else {
+                let (line, column) = Token.getSourceCodeLocation(of: tokens.prev()!).startLineColumnLocation()
+                let message = """
+                              Expected operator at line \(line), column \(column)
+                              """
+                throw ParseError(message: message, errorType: .expectedOperator)
+            }
+            
+            let (lBp, rBp) = bindingPower(of: op)!
+            
+            guard lBp >= min else {
+                break
+            }
+            
+            let _ = tokens.next()
+            let rhsNode = try parseExpression(until: end, min: rBp)
+            
+            var opVal: BinaryOperator
+            switch Token.getValue(of: op) {
+            case "+":
+                opVal = BinaryOperator.plus
+            case "-":
+                opVal = BinaryOperator.minus
+            case "*":
+                opVal = BinaryOperator.times
+            case "&&":
+                opVal = BinaryOperator.and
+            case "||":
+                opVal = BinaryOperator.or
+            default:
+                fatalError() // TODO
+            }
+            
+            lhsNode = BinaryOperation(op: opVal, lhs: lhsNode, rhs: rhsNode)
+        }
+        
+        return lhsNode
     }
     
     //\
@@ -381,7 +509,6 @@ struct Parser {
             if let maybeCloseParen = tokens.peekNext(),
                 maybeCloseParen == .Symbol(")", location: SourceCodeLocation.dummySourceCodeLocation) {
                 
-                let _ = tokens.next()
                 return parameters
                 
             }
@@ -416,7 +543,7 @@ struct Parser {
         
         switch nextToken {
         case .Boolean(_, _), .Identifier(_, _), .Number(_, _):
-            return try parseExpression()
+            return try parseExpression(until: ")", min: 0)
             
         default:
             let (line, column) = Token.getSourceCodeLocation(of: nextToken).startLineColumnLocation()
@@ -510,6 +637,30 @@ struct Parser {
 
 extension Parser {
     
+    // gets binding power of an expression symbol
+    private func bindingPower(of token: Token) -> (Int, Int)? {
+        var op: String
+        
+        switch token {
+        case let .Symbol(symbol, _):
+            op = symbol
+        default:
+            return nil
+        }
+        
+        switch op {
+        case "+", "-":
+            return (1, 2)
+        case "*", "/":
+            return (3, 4)
+        default:
+            return nil
+        }
+    }
+}
+
+extension Parser {
+    
     struct ParseError: Error {
         var message: String
         var errorType: ParseErrorType
@@ -535,5 +686,9 @@ extension Parser {
         
         case expectedClosingBrace
         case expectedClosingParen
+        
+        case expectedOperator
+        case expectedExpression
+        case expectedAtomic
     }
 }

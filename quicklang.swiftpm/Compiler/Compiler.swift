@@ -9,16 +9,13 @@ struct Compiler {
     var lexer: Lexer
     
     let program = """
-                  func abc(param1: Int) -> Bool { 
-                    if 32 { 
-                        return 32 
-                    } else { 
-                        return 31 
-                    }
+                  func i() -> Int {
+                      if (2 * 3) {
+                        return 10 + 3 * 20;
+                      } else {
+                        return false;
+                      }
                   }
-                  let value = 32;
-                  var value2 = true;
-                  abc(value)
                   """
     
     init() {

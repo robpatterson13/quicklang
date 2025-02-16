@@ -5,7 +5,11 @@
 //  Created by Rob Patterson on 2/11/25.
 //
 
-struct Program {
+protocol ASTNode {
+    
+}
+
+struct TopLevel {
     var sections: [TopLevelNode]
 }
 
