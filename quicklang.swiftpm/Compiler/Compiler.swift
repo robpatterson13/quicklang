@@ -16,7 +16,7 @@ struct Compiler {
                         return 31;
                     }
                   }
-                  func i() -> Int {
+                  func i(abcdce: Bool, hello: Int) -> Int {
                       if (2 * 3) {
                         return 10 + 3 * 20;
                       } else {
