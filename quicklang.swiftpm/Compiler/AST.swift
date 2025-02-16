@@ -25,7 +25,7 @@ protocol ASTVisitor {
 }
 
 protocol ASTNode {
-    func accept(visitor: ASTVisitor)
+    func accept(_ visitor: ASTVisitor)
 }
 
 struct TopLevel {
@@ -47,7 +47,7 @@ protocol StatementNode: BlockLevelNode { }
 struct IdentifierExpression: ExpressionNode {
     var name: String
     
-    func accept(visitor: any ASTVisitor) {
+    func accept(_ visitor: any ASTVisitor) {
         visitor.visitIdentifierExpression(self)
     }
 }
@@ -55,7 +55,7 @@ struct IdentifierExpression: ExpressionNode {
 struct BooleanExpression: ExpressionNode {
     var value: Bool
     
-    func accept(visitor: any ASTVisitor) {
+    func accept(_ visitor: any ASTVisitor) {
         visitor.visitBooleanExpression(self)
     }
 }
@@ -63,7 +63,7 @@ struct BooleanExpression: ExpressionNode {
 struct NumberExpression: ExpressionNode {
     var value: Int
     
-    func accept(visitor: any ASTVisitor) {
+    func accept(_ visitor: any ASTVisitor) {
         visitor.visitNumberExpression(self)
     }
 }
@@ -77,7 +77,7 @@ struct UnaryOperation: ExpressionNode {
     var op: UnaryOperator
     var expression: any ExpressionNode
     
-    func accept(visitor: any ASTVisitor) {
+    func accept(_ visitor: any ASTVisitor) {
         visitor.visitUnaryOperation(self)
     }
 }
@@ -95,7 +95,7 @@ struct BinaryOperation: ExpressionNode {
     var op: BinaryOperator
     var lhs, rhs: ExpressionNode
     
-    func accept(visitor: any ASTVisitor) {
+    func accept(_ visitor: any ASTVisitor) {
         visitor.visitBinaryOperation(self)
     }
 }
@@ -104,7 +104,7 @@ struct LetDefinition: DefinitionNode  {
     var name: String
     var expression: any ExpressionNode
     
-    func accept(visitor: any ASTVisitor) {
+    func accept(_ visitor: any ASTVisitor) {
         visitor.visitLetDefinition(self)
     }
 }
@@ -113,7 +113,7 @@ struct VarDefinition: DefinitionNode {
     var name: String
     var expression: any ExpressionNode
     
-    func accept(visitor: any ASTVisitor) {
+    func accept(_ visitor: any ASTVisitor) {
         visitor.visitVarDefinition(self)
     }
 }
@@ -132,7 +132,7 @@ struct FuncDefinition: TopLevelNode {
     var parameters: [Parameter]
     var body: [any BlockLevelNode]
     
-    func accept(visitor: any ASTVisitor) {
+    func accept(_ visitor: any ASTVisitor) {
         visitor.visitFuncDefinition(self)
     }
 }
@@ -141,7 +141,7 @@ struct FuncApplication: ExpressionNode, TopLevelNode {
     var name: String
     var arguments: [any ExpressionNode]
     
-    func accept(visitor: any ASTVisitor) {
+    func accept(_ visitor: any ASTVisitor) {
         visitor.visitFuncApplication(self)
     }
 }
@@ -151,7 +151,7 @@ struct IfStatement: StatementNode, BlockLevelNode {
     var thenBranch: [any BlockLevelNode]
     var elseBranch: [any BlockLevelNode]
     
-    func accept(visitor: any ASTVisitor) {
+    func accept(_ visitor: any ASTVisitor) {
         visitor.visitIfStatement(self)
     }
 }
@@ -159,7 +159,7 @@ struct IfStatement: StatementNode, BlockLevelNode {
 struct ReturnStatement: StatementNode, BlockLevelNode {
     var expression: any ExpressionNode
     
-    func accept(visitor: any ASTVisitor) {
+    func accept(_ visitor: any ASTVisitor) {
         visitor.visitReturnStatement(self)
     }
 }

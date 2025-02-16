@@ -12,7 +12,8 @@ expr ::= \<atom\> \
        | \<func-call\>
        
 stmt ::= `if` \<expr\> `{` \<stmt-or-def\> ...+ `}` `else` `{` \<stmt-or-def\> ...+ `}` \
-       | `return` \<expr\>`;`
+       | `return` \<expr\>`;` \
+       | `print(`\<expr\>`)`
        
 def ::= `let` \<identifier\> `=` \<expr\>`;` \
       | `var` \<identifier\> `=` \<expr\>`;`
