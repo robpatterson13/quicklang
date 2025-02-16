@@ -12,10 +12,10 @@ expr ::= \<atom\> \
        | \<identifier\>`(`\<expr\> ...`)`
        
 stmt ::= `if` \<expr\> `{` \<stmt-or-def\> ...+ `}` `else` `{` \<stmt-or-def\> ...+ `}` \
-       | `return` \<expr\>
+       | `return` \<expr\>`;`
        
-def ::= `let` \<identifier\> `=` \<expr\> \
-      | `var` \<identifier\> `=` \<expr\>
+def ::= `let` \<identifier\> `=` \<expr\>`;` \
+      | `var` \<identifier\> `=` \<expr\>`;`
       
 func-def ::= `func` \<identifier\>`(`\<func-param\> ...`)` `->` \<type\> `{` \<stmt-or-def\> ...+ `}`
       
