@@ -1,37 +1,37 @@
-program ::= \<func-def\> \<program\> ...
-          | \<def\> \<program\> ...
+program ::= \<func-def\> \<program\> ... \
+          | \<def\> \<program\> ... \
           | \<expr\>
 
-atom ::= \<num\>
-       | \<bool\>
+atom ::= \<num\> \
+       | \<bool\> \
        | \<identifier\>
 
-expr ::= \<atom\>
-       | `!``(`\<unary-op\>\<expr\>`)`
-       | \<atom\> \<binary-op\> \<expr\>
+expr ::= \<atom\> \
+       | `(`\<unary-op\>\<expr\>`)` \
+       | \<atom\> \<binary-op\> \<expr\> \
        | \<identifier\>`(`\<expr\> ...`)`
        
-stmt ::= `if` \<expr\> `{` \<stmt-or-def\> ...+ `}` `else` `{` \<stmt-or-def\> ...+ `}`
+stmt ::= `if` \<expr\> `{` \<stmt-or-def\> ...+ `}` `else` `{` \<stmt-or-def\> ...+ `}` \
        | `return` \<expr\>
        
-def ::= `let` \<identifier\> `=` \<expr\>
+def ::= `let` \<identifier\> `=` \<expr\> \
       | `var` \<identifier\> `=` \<expr\>
       
-func-def ::= `func` \<identifier\>`(`\<func-param\> ...`)` `-\>` \<type\> `{` \<stmt-or-def\> ...+ `}`
+func-def ::= `func` \<identifier\>`(`\<func-param\> ...`)` `->` \<type\> `{` \<stmt-or-def\> ...+ `}`
       
 func-param ::= \<identifier\>`:` \<type\>
       
-type ::= Int
+type ::= Int \
        | Bool
        
-stmt-or-def ::= \<stmt\>
+stmt-or-def ::= \<stmt\> \
               | \<def\>
        
-unary-op ::= !
+unary-op ::= ! \
            | -
        
-binary-op ::= +
-            | -
-            | *
-            | &&
+binary-op ::= + \
+            | - \
+            | * \
+            | && \
             | ||
