@@ -60,6 +60,23 @@ extension Token {
     }
 }
 
+extension Token {
+    
+    static let PLUS: Token = .Symbol("+", SourceCodeLocation.dummySourceCodeLocation)
+    static let MINUS: Token = .Symbol("-", SourceCodeLocation.dummySourceCodeLocation)
+    static let STAR: Token = .Symbol("*", SourceCodeLocation.dummySourceCodeLocation)
+    
+    static let AND: Token = .Symbol("&&", SourceCodeLocation.dummySourceCodeLocation)
+    static let OR: Token = .Symbol("||", SourceCodeLocation.dummySourceCodeLocation)
+    static let NOT: Token = .Symbol("!", SourceCodeLocation.dummySourceCodeLocation)
+    
+    static let COLON: Token = .Symbol(":", SourceCodeLocation.dummySourceCodeLocation)
+    static let SEMICOLON: Token = .Symbol(";", SourceCodeLocation.dummySourceCodeLocation)
+    static let LPAREN: Token = .Symbol("(", SourceCodeLocation.dummySourceCodeLocation)
+    static let RPAREN: Token = .Symbol(")", SourceCodeLocation.dummySourceCodeLocation)
+    
+}
+
 struct SourceCodeLocationBuilder {
     
     var startLine: Int?
