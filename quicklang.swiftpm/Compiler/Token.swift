@@ -7,11 +7,11 @@
 
 enum Token {
     
-    case Identifier(String, location: SourceCodeLocation)
-    case Keyword(String, location: SourceCodeLocation)
-    case Number(String, location: SourceCodeLocation)
-    case Boolean(String, location: SourceCodeLocation)
-    case Symbol(String, location: SourceCodeLocation)
+    case Identifier(String, location: SourceCodeLocation?)
+    case Keyword(String, location: SourceCodeLocation?)
+    case Number(String, location: SourceCodeLocation?)
+    case Boolean(String, location: SourceCodeLocation?)
+    case Symbol(String, location: SourceCodeLocation?)
 }
 
 extension Token {
@@ -27,14 +27,14 @@ extension Token {
         }
     }
     
-    static func getSourceCodeLocation(of token: Token) -> SourceCodeLocation {
+    static func getSourceCodeLocation(of token: Token) -> SourceCodeLocation? {
         switch token {
         case .Boolean(_, let l),
             .Identifier(_, let l),
             .Number(_, let l),
             .Keyword(_, let l),
             .Symbol(_, let l):
-            return l
+            if l { return l }
         }
     }
 }
@@ -62,18 +62,18 @@ extension Token {
 
 extension Token {
     
-    static let PLUS: Token = .Symbol("+", SourceCodeLocation.dummySourceCodeLocation)
-    static let MINUS: Token = .Symbol("-", SourceCodeLocation.dummySourceCodeLocation)
-    static let STAR: Token = .Symbol("*", SourceCodeLocation.dummySourceCodeLocation)
+    static let PLUS: Token = .Symbol("+")
+    static let MINUS: Token = .Symbol("-")
+    static let STAR: Token = .Symbol("*")
     
-    static let AND: Token = .Symbol("&&", SourceCodeLocation.dummySourceCodeLocation)
-    static let OR: Token = .Symbol("||", SourceCodeLocation.dummySourceCodeLocation)
-    static let NOT: Token = .Symbol("!", SourceCodeLocation.dummySourceCodeLocation)
+    static let AND: Token = .Symbol("&&")
+    static let OR: Token = .Symbol("||")
+    static let NOT: Token = .Symbol("!")
     
-    static let COLON: Token = .Symbol(":", SourceCodeLocation.dummySourceCodeLocation)
-    static let SEMICOLON: Token = .Symbol(";", SourceCodeLocation.dummySourceCodeLocation)
-    static let LPAREN: Token = .Symbol("(", SourceCodeLocation.dummySourceCodeLocation)
-    static let RPAREN: Token = .Symbol(")", SourceCodeLocation.dummySourceCodeLocation)
+    static let COLON: Token = .Symbol(":")
+    static let SEMICOLON: Token = .Symbol(";")
+    static let LPAREN: Token = .Symbol("(")
+    static let RPAREN: Token = .Symbol(")")
     
 }
 

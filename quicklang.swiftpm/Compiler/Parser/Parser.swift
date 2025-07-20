@@ -7,6 +7,7 @@
 
 struct Parser {
     
+    let errorManager: ParserErrorManager
     var tokens: PeekableIterator<Token>
     
     init(for tokens: [Token]) {
@@ -30,13 +31,39 @@ struct Parser {
         return TopLevel(sections: nodes)
     }
     
+    private func error(_ token: Token, _ error: ParseErrorType) {
+        guard let tokenLoc = Token.getSourceCodeLocation(of: token).startLineColumnLocation() as? (Int, Int) else {
+            fatalError("Token should always have source location")
+        }
+        
+        errorManager.add(ParseError(errorType: error, location: tokenLoc))
+    }
+    
+    mutating private func expect(_ token: Token, _ errorToThrow: ParseErrorType) {
+        guard let currentToken = tokens.next(),
+            currentToken == token else {
+            
+                guard let tokenLoc = Token.getSourceCodeLocation(of: token).startLineColumnLocation() as? (Int, Int) else {
+                    fatalError("Token should always have source location")
+                }
+            
+            let error = ParseError(errorType: errorToThrow, location: tokenLoc)
+            errorManager.add(error)
+            
+//                let (line, column) = Token.getSourceCodeLocation(of: tokens.prev()!).startLineColumnLocation()
+//                let message = """
+//                              Expected ';' to end top-level function call at line \(line), column \(column)
+//                              """
+//                throw ParseError(message: message, errorType: .unexpectedBoolean)
+        }
+    }
+    
     //\
     //  responsible for parsing function and variable definitions,
     //   in addition to function calls;
     //   everything else is unexpected and will throw.
     //
     //   you should never expect to parse a literal!
-    //\
     mutating private func parse() throws -> TopLevelNode {
         
         guard let currentToken = tokens.next() else {
@@ -59,6 +86,8 @@ struct Parser {
             tokens.push(currentToken)
             let val = try parseFunctionApplication()
             
+            expect(Token.SEMICOLON, .expectedSemicolonToEndFunctionCall)
+            
             guard let hopefullySemicolon = tokens.next(),
                   Token.getValue(of: hopefullySemicolon) == ";" else {
                 let (line, column) = Token.getSourceCodeLocation(of: tokens.prev()!).startLineColumnLocation()
@@ -71,11 +100,13 @@ struct Parser {
             
         // the uninteresting cases
         case .Boolean(let val, _):
-            let (line, column) = Token.getSourceCodeLocation(of: tokens.prev()!).startLineColumnLocation()
-            let message = """
-                          Unexpected boolean "\(val)" at line \(line), column \(column)"
-                          """
-            throw ParseError(message: message, errorType: .unexpectedBoolean)
+            error(tokens.prev()!, .unexpectedBoolean)
+            
+//            let (line, column) = Token.getSourceCodeLocation(of: tokens.prev()!).startLineColumnLocation()
+//            let message = """
+//                          Unexpected boolean "\(val)" at line \(line), column \(column)"
+//                          """
+//            throw ParseError(message: message, errorType: .unexpectedBoolean)
             
         case .Number(let val, _):
             let (line, column) = Token.getSourceCodeLocation(of: tokens.prev()!).startLineColumnLocation()
@@ -666,39 +697,5 @@ extension Parser {
         default:
             return nil
         }
-    }
-}
-
-extension Parser {
-    
-    struct ParseError: Error {
-        var message: String
-        var errorType: ParseErrorType
-    }
-    
-    enum ParseErrorType {
-        case expectedTypeIdentifier
-        case expectedParameterType
-        case expectedIdentifier
-        
-        case expectedFunctionApplication
-        case expectedFunctionArgument
-        
-        case unexpectedBoolean
-        case unexpectedNumber
-        case unexpectedString
-        case unexpectedSymbol
-        case unexpectedKeyword
-        
-        case internalParserError
-        
-        case expectedToken
-        
-        case expectedClosingBrace
-        case expectedClosingParen
-        
-        case expectedOperator
-        case expectedExpression
-        case expectedAtomic
     }
 }

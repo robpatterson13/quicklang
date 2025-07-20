@@ -5,7 +5,7 @@
 //  Created by Rob Patterson on 2/16/25.
 //
 
-struct Typechecker: ASTVisitor {
+struct Typechecker: ASTVisitor {    
     
     func visitIdentifierExpression(_ expression: IdentifierExpression) {
         <#code#>
