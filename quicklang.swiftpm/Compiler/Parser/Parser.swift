@@ -5,7 +5,7 @@
 //  Created by Rob Patterson on 2/4/25.
 //
 
-struct Parser {
+class Parser {
     
     let errorManager: ParserErrorManager
     var tokens: PeekableIterator<Token>
@@ -14,378 +14,217 @@ struct Parser {
         self.tokens = PeekableIterator(elements: tokens)
     }
     
-    //\
-    //  parser interface, main entry point from
-    //   compiler driver.
-    //
-    //   loops on calls to parse if more tokens
-    //\
-    mutating func beginParse() throws -> TopLevel {
+    func beginParse() -> TopLevel {
         
         var nodes: [any TopLevelNode] = []
         
         while !tokens.isEmpty() {
-            nodes.append(try parse())
+            nodes.append(parse())
         }
         
         return TopLevel(sections: nodes)
     }
     
-    private func error(_ token: Token, _ error: ParseErrorType) {
-        guard let tokenLoc = Token.getSourceCodeLocation(of: token).startLineColumnLocation() as? (Int, Int) else {
-            fatalError("Token should always have source location")
-        }
+    private func error(_ error: ParserErrorType) {
         
-        errorManager.add(ParseError(errorType: error, location: tokenLoc))
+        let location = tokens.peekNext()?.location
+        ?? tokens.peekPrev()?.location
+        ?? .beginningOfFile
+        
+        errorManager.add(error, at: location)
     }
     
-    mutating private func expect(_ token: Token, _ errorToThrow: ParseErrorType) {
-        guard let currentToken = tokens.next(),
-            currentToken == token else {
-            
-                guard let tokenLoc = Token.getSourceCodeLocation(of: token).startLineColumnLocation() as? (Int, Int) else {
-                    fatalError("Token should always have source location")
-                }
-            
-            let error = ParseError(errorType: errorToThrow, location: tokenLoc)
-            errorManager.add(error)
-            
-//                let (line, column) = Token.getSourceCodeLocation(of: tokens.prev()!).startLineColumnLocation()
-//                let message = """
-//                              Expected ';' to end top-level function call at line \(line), column \(column)
-//                              """
-//                throw ParseError(message: message, errorType: .unexpectedBoolean)
+    @discardableResult
+    private func expect(_ token: Token? = nil, else error: ParserErrorType, burnToken: Bool = false) -> Token {
+        
+        if token == nil, tokens.peekNext() == nil {
+            self.error(error)
         }
+            
+        guard let token, let currentToken = tokens.peekNext(), currentToken == token else {
+            self.error(error)
+        }
+        
+        if burnToken {
+            tokens.burn()
+        }
+        
+        return currentToken
     }
     
-    //\
-    //  responsible for parsing function and variable definitions,
-    //   in addition to function calls;
-    //   everything else is unexpected and will throw.
-    //
-    //   you should never expect to parse a literal!
-    mutating private func parse() throws -> TopLevelNode {
+    private func expectAndBurn(_ token: Token, else error: ParserErrorType) {
+        expect(token, else: error, burnToken: true)
+    }
+    
+    private func parse() -> TopLevelNode {
         
-        guard let currentToken = tokens.next() else {
-            let message = """
-                          Expected input; file cannot be empty
-                          """
-            throw ParseError(message: message, errorType: .expectedToken)
-        }
+        let currentToken = expect(else: .expectedTopLevelStatement(got: .eof))
         
         switch currentToken {
         // the interesting cases!
         case .Keyword("func", _):
-            return try parseFunctionDefinition()
+            return parseFunctionDefinition()
             
         case .Keyword("var", _), .Keyword("let", _):
-            tokens.push(currentToken)
-            return try parseDefinition()
+            return parseDefinition()
             
-        case .Identifier(_, _):
-            tokens.push(currentToken)
-            let val = try parseFunctionApplication()
-            
-            expect(Token.SEMICOLON, .expectedSemicolonToEndFunctionCall)
-            
-            guard let hopefullySemicolon = tokens.next(),
-                  Token.getValue(of: hopefullySemicolon) == ";" else {
-                let (line, column) = Token.getSourceCodeLocation(of: tokens.prev()!).startLineColumnLocation()
-                let message = """
-                              Expected ';' to end top-level function call at line \(line), column \(column)
-                              """
-                throw ParseError(message: message, errorType: .unexpectedBoolean)
-            }
-            return val
+        case .Identifier:
+            return parseFunctionApplication()
             
         // the uninteresting cases
-        case .Boolean(let val, _):
-            error(tokens.prev()!, .unexpectedBoolean)
+        case .Boolean:
+            self.error(.expectedTopLevelStatement(got: .boolean))
             
-//            let (line, column) = Token.getSourceCodeLocation(of: tokens.prev()!).startLineColumnLocation()
-//            let message = """
-//                          Unexpected boolean "\(val)" at line \(line), column \(column)"
-//                          """
-//            throw ParseError(message: message, errorType: .unexpectedBoolean)
-            
-        case .Number(let val, _):
-            let (line, column) = Token.getSourceCodeLocation(of: tokens.prev()!).startLineColumnLocation()
-            let message = """
-                          Unexpected number "\(val)" at line \(line), column \(column)"
-                          """
-            throw ParseError(message: message, errorType: .unexpectedNumber)
+        case .Number:
+            self.error(.expectedTopLevelStatement(got: .number))
             
         case .Keyword(let val, _):
-            let (line, column) = Token.getSourceCodeLocation(of: tokens.prev()!).startLineColumnLocation()
-            let message = """
-                          Unexpected keyword "\(val)" at line \(line), column \(column)"
-                          """
-            throw ParseError(message: message, errorType: .unexpectedKeyword)
+            self.error(.expectedTopLevelStatement(got: .keyword(val)))
             
         case .Symbol(let val, _):
-            let (line, column) = Token.getSourceCodeLocation(of: tokens.prev()!).startLineColumnLocation()
-            let message = """
-                          Unexpected symbol "\(val)" at line \(line), column \(column)"
-                          """
-            throw ParseError(message: message, errorType: .unexpectedSymbol)
+            self.error(.expectedTopLevelStatement(got: .symbol(val)))
             
         }
     }
-    
-    //\
-    //  responsible for parsing the function identifier and signature
-    //   passes off calls for function params and body
-    //\
-    mutating private func parseFunctionDefinition() throws -> FuncDefinition {
+
+    private func parseFunctionDefinition() -> FuncDefinition {
         
-        let identifier = try self.parseIdentifier()
+        expectAndBurn(.FUNC, else: .internalParserError(type: .unreachable("Can only be called when func keyword is encountered")))
         
-        guard let hopefullyOpenParen = tokens.next(),
-              hopefullyOpenParen == .Symbol("(", location: SourceCodeLocation.dummySourceCodeLocation) else {
-            
-            let (line, column) = Token.getSourceCodeLocation(of: tokens.prev()!).startLineColumnLocation()
-            let message = """
-                          Expected '(' at line \(line), column \(column)
-                          to begin signature of "\(identifier)"
-                          """
-            throw ParseError(message: message, errorType: .expectedToken)
-        }
+        let identifier = parseIdentifier(in: .functionDefinition)
         
-        let parameters = try self.parseFunctionParameters()
+        expectAndBurn(.LPAREN, else: .expectedLeftParen(where: .functionDefinition))
+        let parameters = parseFunctionParameters()
+        expectAndBurn(.RPAREN, else: .expectedRightParen(where: .functionDefinition))
         
-        guard let hopefullyOpenParen = tokens.next(),
-              hopefullyOpenParen == .Symbol(")", location: SourceCodeLocation.dummySourceCodeLocation) else {
-            
-            let (line, column) = Token.getSourceCodeLocation(of: tokens.prev()!).startLineColumnLocation()
-            let message = """
-                          Expected ')' at line \(line), column \(column)
-                          to close signature of "\(identifier)"
-                          """
-            throw ParseError(message: message, errorType: .expectedToken)
-        }
+        expectAndBurn(.ARROW, else: .expectedArrowInFunctionDefinition)
         
-        guard let hopefullyArrow = tokens.next(),
-              hopefullyArrow == .Symbol("->", location: SourceCodeLocation.dummySourceCodeLocation) else {
-            
-            let (line, column) = Token.getSourceCodeLocation(of: tokens.prev()!).startLineColumnLocation()
-            let message = """
-                          Expected '->' at line \(line), column \(column)
-                          to begin signature of "\(identifier)"
-                          """
-            throw ParseError(message: message, errorType: .expectedToken)
-        }
+        let typeName = parseType()
         
-        let typeName = try self.parseType()
+        let body = parseBlock(in: .functionBody)
         
-        return FuncDefinition(name: identifier, type: typeName, parameters: parameters, body: try parseBlock())
+        return FuncDefinition(name: identifier, type: typeName, parameters: parameters, body: body)
     }
     
-    //\
-    //  responsible for parsing a braced block (ex. function bodies, if statements)
-    //\
-    mutating private func parseBlock() throws -> [any BlockLevelNode] {
+    private enum BlockContext {
+        case ifStatement
+        case functionBody
+        
+        var errorTypeForLeft: ExpectedLeftBraceErrorInfo.ErrorType {
+            switch self {
+            case .ifStatement:
+                return .ifStatement
+            case .functionBody:
+                return .functionBody
+            }
+        }
+        
+        var errorTypeForRight: ExpectedRightBraceErrorInfo.ErrorType {
+            switch self {
+            case .ifStatement:
+                return .ifStatement
+            case .functionBody:
+                return .functionBody
+            }
+        }
+    }
+    
+    private func parseBlock(in usage: BlockContext) -> [any BlockLevelNode] {
         
         var bodyParts: [any BlockLevelNode] = []
         
-        guard let hopefullyOpenBrace = tokens.next(),
-              hopefullyOpenBrace == .Symbol("{", location: SourceCodeLocation.dummySourceCodeLocation) else {
-            
-            let (line, column) = Token.getSourceCodeLocation(of: tokens.prev()!).startLineColumnLocation()
-            let message = """
-                          Expected '{' at line \(line), column \(column)
-                          to begin block definition
-                          """
-            throw ParseError(message: message, errorType: .expectedClosingBrace)
-        }
+        expectAndBurn(.LBRACE, else: .expectedLeftBrace(where: usage.errorTypeForLeft))
         
-        while let nextToken = tokens.peekNext(),
-              nextToken != .Symbol("}", location: SourceCodeLocation.dummySourceCodeLocation) {
+        while let nextToken = tokens.peekNext(), nextToken != .RBRACE {
             
-            if let bodyPart = try parseBlockBodyPart() {
+            if let bodyPart = parseBlockBodyPart() {
                 bodyParts.append(bodyPart)
             }
         }
         
-        guard let nextToken = tokens.next(),
-           nextToken == .Symbol("}", location: SourceCodeLocation.dummySourceCodeLocation) else {
-            
-            let (line, column) = Token.getSourceCodeLocation(of: tokens.prev()!).startLineColumnLocation()
-            let (openingLine, openingColumn) = Token.getSourceCodeLocation(of: hopefullyOpenBrace).startLineColumnLocation()
-            let message = """
-                          Expected '}' at line \(line), column \(column)
-                          to close block definition started at line
-                          \(openingLine), column \(openingColumn)
-                          """
-            throw ParseError(message: message, errorType: .expectedClosingBrace)
-        }
+        expect(.RBRACE, else: .expectedRightBrace(where: usage.errorTypeForRight))
         
         return bodyParts
     }
     
-    //\
-    //  responsible for parsing if statements
-    //\
-    mutating private func parseIfStatement() throws -> IfStatement {
+    private func parseIfStatement() -> IfStatement {
         
-        let keyword = tokens.next()!
+        expectAndBurn(.IF, else: .internalParserError(type: .unreachable("This should never be reached without an if being parsed")))
         
-        guard let hopefullyParen = tokens.next(),
-              hopefullyParen == .Symbol("(", location: SourceCodeLocation.dummySourceCodeLocation) else {
-            let (line, column) = Token.getSourceCodeLocation(of: tokens.prev()!).startLineColumnLocation()
-            let message = """
-                          Expected condition for if statement at line \(line), column \(column)"
-                          """
-            throw ParseError(message: message, errorType: .expectedToken)
+        expectAndBurn(.LPAREN, else: .expectedLeftParen(where: .ifStatement))
+        let condition = parseExpression(until: ")", min: 0)
+        expectAndBurn(.RPAREN, else: .expectedRightParen(where: .ifStatement))
+        
+        let thnBlock = parseBlock(in: .ifStatement)
+        
+        guard let token = tokens.next(), token == .ELSE else {
+            return IfStatement(condition: condition, thenBranch: thnBlock, elseBranch: nil)
         }
         
-        let condition = try parseExpression(until: ")", min: 0)
-        
-        guard let hopefullyCloseParen = tokens.next(),
-              hopefullyCloseParen == .Symbol(")", location: SourceCodeLocation.dummySourceCodeLocation) else {
-            let (line, column) = Token.getSourceCodeLocation(of: tokens.prev()!).startLineColumnLocation()
-            let message = """
-                          Expected ')' to close condition at line \(line), column \(column)"
-                          """
-            throw ParseError(message: message, errorType: .expectedToken)
-        }
-        
-        let thnBlock = try parseBlock()
-        
-        guard let hopefullyElse = tokens.next(),
-              hopefullyElse == .Keyword("else", location: SourceCodeLocation.dummySourceCodeLocation) else {
-            let (line, column) = Token.getSourceCodeLocation(of: keyword).startLineColumnLocation()
-            let message = """
-                          Expected else branch of if statement at line \(line), column \(column)"
-                          """
-            throw ParseError(message: message, errorType: .expectedToken)
-        }
-        
-        let elsBlock = try parseBlock()
+        let elsBlock = parseBlock(in: .ifStatement)
         
         return IfStatement(condition: condition, thenBranch: thnBlock, elseBranch: elsBlock)
     }
     
-    //\
-    //  parses a return statement
-    //\
-    mutating private func parseReturnStatement() throws -> ReturnStatement {
+    private func parseReturnStatement() -> ReturnStatement {
         
-        let node = ReturnStatement(expression: try parseExpression(until: ";", min: 0))
+        expectAndBurn(.RETURN, else: .internalParserError(type: .unreachable("We should never get here without first parsing a return token")))
         
-        guard let hopefullySemicolon = tokens.next(),
-              Token.getValue(of: hopefullySemicolon) == ";" else {
-            let (line, column) = Token.getSourceCodeLocation(of: tokens.prev()!).startLineColumnLocation()
-            let message = """
-                          Expected ';' at line \(line), column \(column)
-                          to end return statement"
-                          """
-            throw ParseError(message: message, errorType: .expectedToken)
-        }
+        let node = ReturnStatement(expression: parseExpression(until: ";", min: 0))
+        
+        expectAndBurn(.SEMICOLON, else: .expectedSemicolonToEndStatement(of: .return))
         
         return node
     }
     
-    //\
-    //  responsible for parsing block level parts (statements, definitions, etc.)
-    //\
-    mutating private func parseBlockBodyPart() throws -> BlockLevelNode? {
+    private func parseBlockBodyPart() -> BlockLevelNode? {
         
-        guard let currentToken = tokens.peekNext() else {
-            let (line, _) = Token.getSourceCodeLocation(of: tokens.prev()!).startLineColumnLocation()
-            let message = """
-                          Expected closing brace for function at line \(line + 1)"
-                          """
-            throw ParseError(message: message, errorType: .expectedToken)
-        }
+        let currentToken = expect(else: .expectedBlockBodyPart(got: .eof))
         
         switch currentToken {
         // the interesting cases!
         case .Keyword("var", _), .Keyword("let", _):
-            return try parseDefinition()
+            return parseDefinition()
             
-        case .Identifier(_, _):
-            return try parseFunctionApplication()
+        case .Identifier:
+            return parseFunctionApplication()
             
         case .Keyword("return", _):
-            let _ = tokens.next()
-            return try parseReturnStatement()
+            return parseReturnStatement()
             
         case .Keyword("if", _):
-            return try parseIfStatement()
+            return parseIfStatement()
             
         case .Symbol("}", _):
-            let _ = tokens.next()
             return nil
             
         // the uninteresting cases
-        case .Boolean(let val, _):
-            let (line, column) = Token.getSourceCodeLocation(of: tokens.prev()!).startLineColumnLocation()
-            let message = """
-                          Unexpected boolean "\(val)" at line \(line), column \(column)"
-                          """
-            throw ParseError(message: message, errorType: .unexpectedBoolean)
+        case .Boolean:
+            self.error(.expectedBlockBodyPart(got: .boolean))
             
-        case .Number(let val, _):
-            let (line, column) = Token.getSourceCodeLocation(of: tokens.prev()!).startLineColumnLocation()
-            let message = """
-                          Unexpected number "\(val)" at line \(line), column \(column)"
-                          """
-            throw ParseError(message: message, errorType: .unexpectedNumber)
+        case .Number:
+            self.error(.expectedBlockBodyPart(got: .number))
             
         case .Keyword(let val, _):
-            let (line, column) = Token.getSourceCodeLocation(of: tokens.prev()!).startLineColumnLocation()
-            let message = """
-                          Unexpected keyword "\(val)" at line \(line), column \(column)"
-                          """
-            throw ParseError(message: message, errorType: .unexpectedKeyword)
+            self.error(.expectedBlockBodyPart(got: .keyword(val)))
             
         case .Symbol(let val, _):
-            let (line, column) = Token.getSourceCodeLocation(of: tokens.prev()!).startLineColumnLocation()
-            let message = """
-                          Unexpected symbol "\(val)" at line \(line), column \(column)"
-                          """
-            throw ParseError(message: message, errorType: .unexpectedSymbol)
+            self.error(.expectedBlockBodyPart(got: .symbol(val)))
             
         }
     }
     
-    //\
-    //  parses var and let variable definitions.
-    //
-    //  > !! <
-    //  invariant: parseDefinition is only called
-    //   is only called right after a push onto
-    //   tokens
-    //\
-    mutating private func parseDefinition() throws -> any DefinitionNode {
+    private func parseDefinition() -> any DefinitionNode {
         
-        let keyword = tokens.next()!
+        let keyword = expect(else: .internalParserError(type: .unreachable("There should be a keyword here")))
         
-        let identifier = try self.parseIdentifier()
+        let identifier = self.parseIdentifier(in: .valueDefinition)
         
-        guard let hopefullyEquals = tokens.next(),
-              hopefullyEquals == .Symbol("=", location: SourceCodeLocation.dummySourceCodeLocation) else {
-            
-            let (line, column) = Token.getSourceCodeLocation(of: tokens.prev()!).startLineColumnLocation()
-            let message = """
-                          Expected '=' at line \(line), column \(column)
-                          to begin definition of "\(identifier)"
-                          """
-            throw ParseError(message: message, errorType: .expectedToken)
-        }
+        expectAndBurn(.EQUAL, else: .expectedEqualInAssignment)
         
-        let boundExpression = try parseExpression(until: ";", min: 0)
+        let boundExpression = parseExpression(until: ";", min: 0)
         
-        guard let hopefullySemicolon = tokens.next(),
-              Token.getValue(of: hopefullySemicolon) == ";" else {
-            
-            let (line, column) = Token.getSourceCodeLocation(of: tokens.prev()!).startLineColumnLocation()
-            let message = """
-                          Expected ';' at line \(line), column \(column)
-                          to end definition of "\(identifier)"
-                          """
-            throw ParseError(message: message, errorType: .expectedToken)
-        }
+        expectAndBurn(.SEMICOLON, else: .expectedSemicolonToEndStatement(of: .definition))
         
         switch keyword {
         case .Keyword("var", _):
@@ -393,26 +232,19 @@ struct Parser {
         case .Keyword("let", _):
             return LetDefinition(name: identifier, expression: boundExpression)
         default:
-            let (line, column) = Token.getSourceCodeLocation(of: keyword).startLineColumnLocation()
-            let message = """
-                          Keyword must be var or let,
-                          received "\(Token.getValue(of: keyword))"
-                          at line \(line), column \(column)
-                          """
-            throw ParseError(message: message, errorType: .internalParserError)
+            self.error(
+                .internalParserError(
+                    type: .unreachable("Keyword must be let or var in definition, got \(keyword.value)")
+                )
+            )
         }
     }
     
-    //\
-    //  parses an atomic expression (identifier, function call, boolean, number)
-    //\
-    mutating private func parseAtomic(_ token: Token) throws -> any ExpressionNode {
+    private func parseAtomic(_ token: Token) -> any ExpressionNode {
         switch token {
         case let .Identifier(id, _):
-            if let maybeParen = tokens.peekNext(),
-               Token.getValue(of: maybeParen) == "(" {
-                tokens.push(token)
-                return try parseFunctionApplication()
+            if let maybeParen = tokens.peekNext(), maybeParen == .LPAREN {
+                return parseFunctionApplication()
             } else {
                 return IdentifierExpression(name: id)
             }
@@ -424,57 +256,36 @@ struct Parser {
             return BooleanExpression(value: Bool(b)!)
             
         default:
-            let (line, column) = Token.getSourceCodeLocation(of: tokens.prev()!).startLineColumnLocation()
-            let message = """
-                          Expected an atom at line \(line), column \(column)
-                          """
-            throw ParseError(message: message, errorType: .expectedAtomic)
+            self.error(.expectedAtomic)
         }
     }
     
-    //\
-    //  parses an expression.
-    //
     //  infinite thank you to https://matklad.github.io/2020/04/13/simple-but-powerful-pratt-parsing.html
-    //\
-    mutating private func parseExpression(until end: String, min: Int) throws -> any ExpressionNode {
-        guard let lhs = tokens.next(),
-              Token.isAtomic(lhs) else {
-            let (line, column) = Token.getSourceCodeLocation(of: tokens.prev()!).startLineColumnLocation()
-            let message = """
-                          Expected expression at line \(line), column \(column)
-                          """
-            throw ParseError(message: message, errorType: .expectedExpression)
-        }
+    private func parseExpression(until end: String, min: Int) -> any ExpressionNode {
+        let lhs = expect(else: .expectedExpression)
         
-        var lhsNode = try parseAtomic(lhs)
+        var lhsNode = parseAtomic(lhs)
         
         while true {
-            if let maybeEnd = tokens.peekNext(),
-               Token.getValue(of: maybeEnd) == end {
+            if let maybeEnd = tokens.peekNext(), maybeEnd.value == end {
                 break
             }
             
-            guard let op = tokens.peekNext(),
-                  Token.isOp(op) else {
-                let (line, column) = Token.getSourceCodeLocation(of: tokens.prev()!).startLineColumnLocation()
-                let message = """
-                              Expected operator at line \(line), column \(column)
-                              """
-                throw ParseError(message: message, errorType: .expectedOperator)
+            guard let op = tokens.peekNext(), op.isOp() else {
+                self.error(.expectedOperator)
             }
             
-            let (lBp, rBp) = bindingPower(of: op)!
+            let (lBp, rBp) = op.bindingPower
             
             guard lBp >= min else {
                 break
             }
             
-            let _ = tokens.next()
-            let rhsNode = try parseExpression(until: end, min: rBp)
+            tokens.burn()
+            let rhsNode = parseExpression(until: end, min: rBp)
             
             var opVal: BinaryOperator
-            switch Token.getValue(of: op) {
+            switch op.value {
             case "+":
                 opVal = BinaryOperator.plus
             case "-":
@@ -495,207 +306,117 @@ struct Parser {
         return lhsNode
     }
     
-    //\
-    //  parses function and variable ids.
-    //\
-    mutating private func parseIdentifier() throws -> String {
+    private enum IdentifierUsage {
+        case functionDefinition
+        case valueDefinition
+        case functionParameter
+        case functionApplication
         
-        guard let nextToken = tokens.next() else {
-            let (line, column) = Token.getSourceCodeLocation(of: tokens.prev()!).startLineColumnLocation()
-            let message = """
-                          Expected identifier at line \(line), column \(column),
-                          after "\(Token.getValue(of: tokens.prev()!))"
-                          """
-            throw ParseError(message: message, errorType: .expectedIdentifier)
-        }
-        
-        switch nextToken {
-        case .Identifier(let name, _):
-            return name
-        default:
-            let (line, column) = Token.getSourceCodeLocation(of: nextToken).startLineColumnLocation()
-            let message = """
-                          Expected identifier at line \(line), column \(column), 
-                          got "\(Token.getValue(of: nextToken))" instead
-                          """
-            throw ParseError(message: message, errorType: .expectedIdentifier)
+        var errorType: ExpectedIdentifierErrorInfo.ErrorType {
+            switch self {
+            case .functionDefinition:
+                return .functionDefinition
+            case .valueDefinition:
+                return .valueDefinition
+            case .functionParameter:
+                return .functionParameter
+            case .functionApplication:
+                return .functionApplication
+            }
         }
     }
     
-    //\
-    //  parses function parameters; comes in a tuple of
-    //   identifier and PrimType
-    //\
-    mutating private func parseFunctionParameters() throws -> [FuncDefinition.Parameter] {
+    private func parseIdentifier(in usage: IdentifierUsage) -> String {
+        
+        let currentToken = expect(else: .expectedIdentifier(in: usage.errorType), burnToken: true)
+        
+        switch currentToken {
+        case .Identifier(let name, _):
+            return name
+        default:
+            error(.expectedIdentifier(in: usage.errorType))
+        }
+    }
+    
+    private func parseFunctionParameters() -> [FuncDefinition.Parameter] {
         
         var parameters: [FuncDefinition.Parameter] = []
         
-        while let nextToken = tokens.peekNext(),
-                nextToken != .Symbol(")", location: SourceCodeLocation.dummySourceCodeLocation) {
+        while let nextToken = tokens.peekNext(), nextToken != .RPAREN {
             
-            let identifier = try self.parseIdentifier()
+            let identifier = parseIdentifier(in: .functionParameter)
             
-            guard let hopefullyColon = tokens.next(),
-                    hopefullyColon == .Symbol(":", location: SourceCodeLocation.dummySourceCodeLocation) else {
-                
-                let (line, column) = Token.getSourceCodeLocation(of: nextToken).startLineColumnLocation()
-                let message = "Expected ':' to declare type after parameter name at line \(line), column \(column)"
-                throw ParseError(message: message, errorType: .expectedParameterType)
-            }
+            expectAndBurn(.SEMICOLON, else: .expectedParameterType)
             
-            let type = try parseType()
+            let type = parseType()
             
             parameters.append((identifier, type))
             
-            if let maybeCloseParen = tokens.peekNext(),
-                maybeCloseParen == .Symbol(")", location: SourceCodeLocation.dummySourceCodeLocation) {
-                
+            if let maybeCloseParen = tokens.peekNext(), maybeCloseParen == .RPAREN {
                 return parameters
-                
             }
             
-            if let hopefullyComma = tokens.next(),
-                  hopefullyComma != .Symbol(",", location: SourceCodeLocation.dummySourceCodeLocation) {
-                
-                let (line, column) = Token.getSourceCodeLocation(of: nextToken).startLineColumnLocation()
-                let message = "Expected a comma between function parameters at line \(line), column \(column)"
-                throw ParseError(message: message, errorType: .expectedParameterType)
-            }
+            expectAndBurn(.COMMA, else: .expectedParameterType)
                   
         }
         
         return parameters
     }
     
-    //\
-    //  returns individual arguments of a function application;
-    //   ensures that arguments are expressions
-    //\
-    mutating private func parseFunctionApplicationArgument() throws -> any ExpressionNode {
+    private func parseFunctionApplicationArgument() -> any ExpressionNode {
         
-        guard let nextToken = tokens.peekNext() else {
-            let (line, column) = Token.getSourceCodeLocation(of: tokens.prev()!).startLineColumnLocation()
-            throw ParseError(message: """
-                                      Expected a function application for the identifier "\(Token.getValue(of: tokens.prev()!))"
-                                      at line \(line), column \(column)
-                                      """,
-                             errorType: .expectedFunctionArgument)
-        }
+        let nextToken = expect(else: .expectedFunctionArgument(got: .eof))
         
         switch nextToken {
         case .Boolean(_, _), .Identifier(_, _), .Number(_, _):
-            return try parseExpression(until: ")", min: 0)
-            
-        default:
-            let (line, column) = Token.getSourceCodeLocation(of: nextToken).startLineColumnLocation()
-            throw ParseError(message: """
-                                      Expected an expression as an argument at 
-                                      line \(line), column \(column), got "\(Token.getValue(of: nextToken))" instead
-                                      """,
-                             errorType: .expectedFunctionArgument)
+            return parseExpression(until: ")", min: 0)
+        case .Keyword(let kw, _):
+            self.error(.expectedFunctionArgument(got: .keyword(kw)))
+        case .Symbol(let s, _):
+            self.error(.expectedFunctionArgument(got: .symbol(s)))
         }
     }
     
-    //\
-    //  parses a function application (ex. id(param1, param2, ...))
-    //\
-    mutating private func parseFunctionApplication() throws -> FuncApplication {
+    private func parseFunctionApplication() -> FuncApplication {
         
-        let identifier = try parseIdentifier()
+        let identifier = parseIdentifier(in: .functionApplication)
         
-        guard let hopefullyOpenParen = tokens.next(),
-                hopefullyOpenParen == .Symbol("(", location: SourceCodeLocation.dummySourceCodeLocation) else {
-            
-            let (line, column) = Token.getSourceCodeLocation(of: tokens.prev()!).startLineColumnLocation()
-            throw ParseError(message: "Expected a function application to begin with an opening parenthesis at line \(line), column \(column)",
-                             errorType: .expectedFunctionApplication)
-        }
+        expectAndBurn(.LPAREN, else: .expectedFunctionApplication)
         
         var expressions: [any ExpressionNode] = []
         
-        while let nextToken = tokens.peekNext(),
-                nextToken != .Symbol(")", location: SourceCodeLocation.dummySourceCodeLocation) {
-            expressions.append(try parseFunctionApplicationArgument())
+        while let nextToken = tokens.peekNext(), nextToken != .RPAREN {
+            expressions.append(parseFunctionApplicationArgument())
             
             guard let maybeComma = tokens.peekNext() else {
                 break
             }
             
-            if maybeComma == .Symbol(",", location: SourceCodeLocation.dummySourceCodeLocation) {
-                let _ = tokens.next()
+            if maybeComma == .COMMA {
+                tokens.burn()
             }
         }
         
-        guard let lastToken = tokens.next(),
-              lastToken == .Symbol(")", location: SourceCodeLocation.dummySourceCodeLocation) else {
-            let (line, column) = Token.getSourceCodeLocation(of: tokens.prev()!).startLineColumnLocation()
-            throw ParseError(message: """
-                                      Expected a closing paren, ")", at line \(line), column \(column),
-                                      after the function application
-                                      """,
-                             errorType: .expectedClosingParen)
-        }
+        expectAndBurn(.RPAREN, else: .expectedRightParen(where: .functionApplication))
+        
+        expectAndBurn(.SEMICOLON, else: .expectedSemicolonToEndFunctionCall)
         
         return FuncApplication(name: identifier, arguments: expressions)
     }
     
-    //\
-    //  parses a type identifier; used for parameter declarations in
-    //   function signatures
-    //\
-    mutating private func parseType() throws -> TypeName {
+    private func parseType() -> TypeName {
         
-        guard let nextToken = tokens.next() else {
-            
-            // we can force unwrap; parseType will never be called
-            //  at index 0 of iterator (i.e we never expect a type
-            //  at the beginning of a file)
-            let (line, column) = Token.getSourceCodeLocation(of: tokens.prev()!).startLineColumnLocation()
-                                        
-            throw ParseError(message: "Expected type identifier for parameter being defined at line \(line), column \(column)",
-                             errorType: .expectedTypeIdentifier)
-        }
+        let nextToken = expect(else: .expectedTypeIdentifier)
         
         switch nextToken {
-        case .Keyword(let kw, _):
-            if kw == "Int" {
-                return .Int
-            } else if kw == "Bool" {
-                return .Bool
-            } else if kw == "String" {
-                return .String
-            } else {
-                fallthrough
-            }
+        case .Keyword(let kw, _) where kw == "Int":
+            return .Int
+        case .Keyword(let kw, _) where kw == "Bool":
+            return .Bool
+        case .Keyword(let kw, _) where kw == "String":
+            return .String
         default:
-            let (line, column) = Token.getSourceCodeLocation(of: nextToken).startLineColumnLocation()
-                                        
-            throw ParseError(message: "Expected type identifier for parameter being defined at line \(line), column \(column)",
-                             errorType: .expectedTypeIdentifier)
-        }
-    }
-}
-
-extension Parser {
-    
-    // gets binding power of an expression symbol
-    private func bindingPower(of token: Token) -> (Int, Int)? {
-        var op: String
-        
-        switch token {
-        case let .Symbol(symbol, _):
-            op = symbol
-        default:
-            return nil
-        }
-        
-        switch op {
-        case "+", "-":
-            return (1, 2)
-        case "*", "/":
-            return (3, 4)
-        default:
-            return nil
+            self.error(.expectedTypeIdentifier)
         }
     }
 }
