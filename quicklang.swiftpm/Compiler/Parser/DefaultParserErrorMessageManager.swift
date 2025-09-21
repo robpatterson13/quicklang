@@ -5,81 +5,85 @@
 //  Created by Rob Patterson on 9/14/25.
 //
 
+class DefaultParserErrorFormatter: ParserErrorFormatter {
+    func format(_ error: ParserError) -> String {
+        let locationInfo = "On line \(error.location.startLine), column \(error.location.startColumn):\n"
+        
+        return locationInfo + error.message
+    }
+}
+
 class DefaultParserErrorMessageManager: ParserErrorMessageManager {
     
     func expectedTypeIdentifier(info: ExpectedTypeIdentifierErrorInfo) -> ParserError {
-        <#code#>
+        return ParserError(location: .beginningOfFile, message: "")
     }
     
     func expectedParameterType(info: ExpectedParameterTypeErrorInfo) -> ParserError {
-        <#code#>
+        return ParserError(location: .beginningOfFile, message: "")
     }
     
     func expectedIdentifier(info: ExpectedIdentifierErrorInfo) -> ParserError {
-        <#code#>
+        return ParserError(location: .beginningOfFile, message: "")
     }
     
     func expectedFunctionApplication(info: ExpectedFunctionApplicationErrorInfo) -> ParserError {
-        <#code#>
+        return ParserError(location: .beginningOfFile, message: "")
     }
     
     func expectedFunctionArgument(info: ExpectedFunctionArgumentErrorInfo) -> ParserError {
-        <#code#>
+        return ParserError(location: .beginningOfFile, message: "")
     }
     
     func internalParserError(info: InternalParserErrorInfo) -> ParserError {
-        <#code#>
+        return ParserError(location: .beginningOfFile, message: "")
     }
     
     func expectedLeftParen(info: ExpectedLeftParenErrorInfo) -> ParserError {
-        <#code#>
+        return ParserError(location: .beginningOfFile, message: "")
     }
     
     func expectedRightParen(info: ExpectedRightParenErrorInfo) -> ParserError {
-        <#code#>
+        return ParserError(location: .beginningOfFile, message: "")
     }
     
     func expectedLeftBrace(info: ExpectedLeftBraceErrorInfo) -> ParserError {
-        <#code#>
+        return ParserError(location: .beginningOfFile, message: "")
     }
     
     func expectedRightBrace(info: ExpectedRightBraceErrorInfo) -> ParserError {
-        <#code#>
+        return ParserError(location: .beginningOfFile, message: "")
     }
     
     func expectedArrowInFunctionDefinition(info: ExpectedArrowInFunctionDefinitionErrorInfo) -> ParserError {
-        <#code#>
+        return ParserError(location: .beginningOfFile, message: "")
     }
     
     func expectedEqualInAssignment(info: ExpectedEqualInAssignmentErrorInfo) -> ParserError {
-        <#code#>
+        return ParserError(location: .beginningOfFile, message: "")
     }
     
     func expectedSemicolonToEndStatement(info: ExpectedSemicolonToEndStatementErrorInfo) -> ParserError {
-        <#code#>
+        return ParserError(location: .beginningOfFile, message: "")
     }
     
     func expectedSemicolonToEndFunctionCall(info: ExpectedSemicolonToEndFunctionCallErrorInfo) -> ParserError {
-        <#code#>
+        return ParserError(location: .beginningOfFile, message: "")
     }
     
     func expectedOperator(info: ExpectedOperatorErrorInfo) -> ParserError {
-        <#code#>
+        return ParserError(location: .beginningOfFile, message: "")
     }
     
     func expectedExpression(info: ExpectedExpressionErrorInfo) -> ParserError {
-        <#code#>
-    }
-    
-    func expectedAtomic(info: ExpectedAtomicErrorInfo) -> ParserError {
-        <#code#>
+        return ParserError(location: .beginningOfFile, message: "")
     }
     
     func expectedTopLevelStatement(info: ExpectedTopLevelStatementErrorInfo) -> ParserError {
-        <#code#>
+        return ParserError(location: .beginningOfFile, message: "")
     }
     
     func expectedBlockBodyPart(info: ExpectedBlockBodyPartErrorInfo) -> ParserError {
-        <#code#>
+        return ParserError(location: .beginningOfFile, message: "")
     }
 }
