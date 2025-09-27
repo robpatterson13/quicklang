@@ -5,7 +5,7 @@
 //  Created by Rob Patterson on 2/4/25.
 //
 
-struct Lexer {
+class Lexer {
     
     typealias SourceCode = String
     typealias LexerLocation = (line: Int, column: Int)
@@ -21,7 +21,7 @@ struct Lexer {
         self.sourceLength = sourceCode.count
     }
     
-    mutating private func peekNextCharacter() -> Character? {
+    private func peekNextCharacter() -> Character? {
         
         if self.currentCharIndex >= self.sourceLength {
             return nil
@@ -30,7 +30,7 @@ struct Lexer {
         return self.sourceCode[self.sourceCode.index(self.sourceCode.startIndex, offsetBy: self.currentCharIndex)]
     }
     
-    mutating private func consumeCharacter() -> Character {
+    private func consumeCharacter() -> Character {
         
         let char = self.sourceCode[self.sourceCode.index(self.sourceCode.startIndex, offsetBy: self.currentCharIndex)]
         self.currentCharIndex += 1
@@ -39,7 +39,7 @@ struct Lexer {
         return char
     }
     
-    mutating private func consumeWhitespace(char: Character) {
+    private func consumeWhitespace(char: Character) {
         
         self.currentCharIndex += 1
         
@@ -56,7 +56,7 @@ struct Lexer {
         }
     }
     
-    mutating func tokenize() throws -> Array<Token> {
+    func tokenize() throws -> Array<Token> {
         
         while self.currentCharIndex < self.sourceLength {
             let currentChar = self.sourceCode[self.sourceCode.index(self.sourceCode.startIndex, offsetBy: self.currentCharIndex)]
@@ -77,7 +77,7 @@ struct Lexer {
         return self.tokens
     }
     
-    mutating private func tokenizeWord() -> Token {
+    private func tokenizeWord() -> Token {
         
         var locationBuilder = SourceCodeLocationBuilder()
         locationBuilder.startLine = self.location.line
@@ -109,7 +109,7 @@ struct Lexer {
         }
     }
     
-    mutating private func tokenizeNumber() throws -> Token {
+    private func tokenizeNumber() throws -> Token {
         
         var locationBuilder = SourceCodeLocationBuilder()
         locationBuilder.startLine = self.location.line
@@ -129,7 +129,7 @@ struct Lexer {
         return Token.Number(lexeme, location: locationBuilder.build())
     }
     
-    mutating private func tokenizePunctuation() throws -> Token {
+    private func tokenizePunctuation() throws -> Token {
         
         var locationBuilder = SourceCodeLocationBuilder()
         locationBuilder.startLine = self.location.line

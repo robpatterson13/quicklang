@@ -6,26 +6,82 @@
 //
 
 protocol ASTVisitor {
+    associatedtype ASTVisitResult
     
-    func visitIdentifierExpression(_ expression: IdentifierExpression)
-    func visitBooleanExpression(_ expression: BooleanExpression)
-    func visitNumberExpression(_ expression: NumberExpression)
+    func visitIdentifierExpression(_ expression: IdentifierExpression) -> ASTVisitResult
+    func visitBooleanExpression(_ expression: BooleanExpression) -> ASTVisitResult
+    func visitNumberExpression(_ expression: NumberExpression) -> ASTVisitResult
     
-    func visitUnaryOperation(_ operation: UnaryOperation)
-    func visitBinaryOperation(_ operation: BinaryOperation)
+    func visitUnaryOperation(_ operation: UnaryOperation) -> ASTVisitResult
+    func visitBinaryOperation(_ operation: BinaryOperation) -> ASTVisitResult
     
-    func visitLetDefinition(_ definition: LetDefinition)
-    func visitVarDefinition(_ definition: VarDefinition)
+    func visitLetDefinition(_ definition: LetDefinition) -> ASTVisitResult
+    func visitVarDefinition(_ definition: VarDefinition) -> ASTVisitResult
     
-    func visitFuncDefinition(_ definition: FuncDefinition)
-    func visitFuncApplication(_ expression: FuncApplication)
+    func visitFuncDefinition(_ definition: FuncDefinition) -> ASTVisitResult
+    func visitFuncApplication(_ expression: FuncApplication) -> ASTVisitResult
     
-    func visitIfStatement(_ statement: IfStatement)
-    func visitReturnStatement(_ statement: ReturnStatement)
+    func visitIfStatement(_ statement: IfStatement) -> ASTVisitResult
+    func visitReturnStatement(_ statement: ReturnStatement) -> ASTVisitResult
 }
 
-protocol ASTNode {
-    func accept(_ visitor: ASTVisitor)
+protocol ASTNode: ~Copyable {
+    var isIncomplete: Bool { get }
+    var anyIncomplete: Bool { get }
+    static var incomplete: Self { get }
+    
+    consuming func accept(_ visitor: any ASTVisitor)
+}
+
+extension ASTNode {
+    var anyIncomplete: Bool {
+        if isIncomplete { return true }
+        return Self._containsIncomplete(in: self)
+    }
+    
+    private static func _containsIncomplete(in value: Any) -> Bool {
+        
+        if let node = value as? any ASTNode {
+            if node.isIncomplete { return true }
+        }
+        
+        let mirror = Mirror(reflecting: value)
+        
+        switch mirror.displayStyle {
+        case .optional:
+            if let child = mirror.children.first {
+                return _containsIncomplete(in: child.value)
+            }
+            return false
+            
+        case .collection, .set, .dictionary, .tuple, .struct, .class, .enum:
+            if _hasTrueIsIncompleteFlag(mirror) {
+                return true
+            }
+            
+            for child in mirror.children {
+                if _containsIncomplete(in: child.value) {
+                    return true
+                }
+            }
+            return false
+            
+        case .none:
+            return false
+            
+        default:
+            return false
+        }
+    }
+    
+    private static func _hasTrueIsIncompleteFlag(_ mirror: Mirror) -> Bool {
+        for (labelOpt, value) in mirror.children {
+            if let label = labelOpt, label == "isIncomplete", let flag = value as? Bool, flag == true {
+                return true
+            }
+        }
+        return false
+    }
 }
 
 struct TopLevel {
@@ -33,7 +89,46 @@ struct TopLevel {
 }
 
 protocol BlockLevelNode: ASTNode { }
+
+struct BlockLevelNodeIncomplete: BlockLevelNode {
+    var isIncomplete: Bool
+    
+    static var incomplete: BlockLevelNodeIncomplete {
+        BlockLevelNodeIncomplete()
+    }
+    
+    private init() {
+        self.isIncomplete = true
+    }
+    
+    consuming func accept(_ visitor: any ASTVisitor) {
+    }
+}
+
 protocol TopLevelNode: BlockLevelNode { }
+
+struct TopLevelNodeIncomplete: TopLevelNode {
+    static var incomplete: TopLevelNodeIncomplete {
+        TopLevelNodeIncomplete()
+    }
+    
+    private init() {
+        self.isIncomplete = true
+    }
+    
+    var isIncomplete: Bool
+    
+    func accept(_ visitor: any ASTVisitor) {
+        
+    }
+}
+
+extension TopLevelNode {
+    
+    static var incomplete: FuncDefinition {
+        FuncDefinition.incomplete
+    }
+}
 
 protocol ExpressionNode: ASTNode { }
 
@@ -45,7 +140,23 @@ protocol DefinitionNode: TopLevelNode {
 protocol StatementNode: BlockLevelNode { }
 
 struct IdentifierExpression: ExpressionNode {
-    var name: String
+    let name: String
+    
+    let isIncomplete: Bool
+    
+    static var incomplete: IdentifierExpression {
+        return IdentifierExpression()
+    }
+    
+    private init() {
+        self.name = ""
+        self.isIncomplete = true
+    }
+    
+    init(name: String) {
+        self.name = name
+        self.isIncomplete = false
+    }
     
     func accept(_ visitor: any ASTVisitor) {
         visitor.visitIdentifierExpression(self)
@@ -53,7 +164,23 @@ struct IdentifierExpression: ExpressionNode {
 }
 
 struct BooleanExpression: ExpressionNode {
-    var value: Bool
+    let value: Bool
+    
+    let isIncomplete: Bool
+    
+    static var incomplete: BooleanExpression {
+        return BooleanExpression()
+    }
+    
+    private init() {
+        self.value = false
+        self.isIncomplete = true
+    }
+    
+    init(value: Bool) {
+        self.value = value
+        self.isIncomplete = false
+    }
     
     func accept(_ visitor: any ASTVisitor) {
         visitor.visitBooleanExpression(self)
@@ -61,48 +188,118 @@ struct BooleanExpression: ExpressionNode {
 }
 
 struct NumberExpression: ExpressionNode {
-    var value: Int
+    let value: Int
+    
+    let isIncomplete: Bool
+    
+    static var incomplete: NumberExpression {
+        return NumberExpression()
+    }
+    
+    private init() {
+        self.value = 0
+        self.isIncomplete = true
+    }
+    
+    init(value: Int) {
+        self.value = value
+        self.isIncomplete = false
+    }
     
     func accept(_ visitor: any ASTVisitor) {
         visitor.visitNumberExpression(self)
     }
 }
 
-enum UnaryOperator {
-    case not
-    case neg
-}
-
 struct UnaryOperation: ExpressionNode {
-    var op: UnaryOperator
-    var expression: any ExpressionNode
+    let op: Operator
+    enum Operator {
+        case not
+        case neg
+    }
+    let expression: any ExpressionNode
+    
+    let isIncomplete: Bool
+    
+    static var incomplete: UnaryOperation {
+        return UnaryOperation()
+    }
+    
+    private init() {
+        self.op = .not
+        self.expression = IdentifierExpression.incomplete
+        self.isIncomplete = true
+    }
+    
+    init(op: Operator, expression: any ExpressionNode) {
+        self.op = op
+        self.expression = expression
+        self.isIncomplete = false
+    }
     
     func accept(_ visitor: any ASTVisitor) {
         visitor.visitUnaryOperation(self)
     }
 }
 
-enum BinaryOperator {
-    case plus
-    case minus
-    case times
-    
-    case and
-    case or
-}
-
 struct BinaryOperation: ExpressionNode {
-    var op: BinaryOperator
-    var lhs, rhs: ExpressionNode
+    let op: Operator
+    enum Operator {
+        case plus
+        case minus
+        case times
+        
+        case and
+        case or
+    }
+    let lhs, rhs: ExpressionNode
     
-    func accept(_ visitor: any ASTVisitor) {
-        visitor.visitBinaryOperation(self)
+    let isIncomplete: Bool
+    
+    static var incomplete: BinaryOperation {
+        return BinaryOperation()
+    }
+    
+    private init() {
+        self.op = .plus
+        self.lhs = IdentifierExpression.incomplete
+        self.rhs = IdentifierExpression.incomplete
+        self.isIncomplete = true
+    }
+    
+    init(op: Operator, lhs: ExpressionNode, rhs: ExpressionNode) {
+        self.op = op
+        self.lhs = lhs
+        self.rhs = rhs
+        self.isIncomplete = false
+    }
+    
+    consuming func accept(_ visitor: any ASTVisitor) {
+        visitor.visitBinaryOperation(consume self)
     }
 }
 
 struct LetDefinition: DefinitionNode  {
-    var name: String
-    var expression: any ExpressionNode
+    let name: String
+    let expression: any ExpressionNode
+    
+    let isIncomplete: Bool
+    
+    static var incomplete: LetDefinition {
+        return LetDefinition()
+    }
+    
+    private init() {
+        self.name = ""
+        self.expression = IdentifierExpression.incomplete
+        self.isIncomplete = true
+    }
+    
+    init(name: String, expression: any ExpressionNode) {
+        self.name = name
+        self.expression = expression
+        self.isIncomplete = false
+    }
     
     func accept(_ visitor: any ASTVisitor) {
         visitor.visitLetDefinition(self)
@@ -110,8 +307,26 @@ struct LetDefinition: DefinitionNode  {
 }
 
 struct VarDefinition: DefinitionNode {
-    var name: String
-    var expression: any ExpressionNode
+    let name: String
+    let expression: any ExpressionNode
+    
+    let isIncomplete: Bool
+    
+    static var incomplete: VarDefinition {
+        return VarDefinition()
+    }
+    
+    private init() {
+        self.name = ""
+        self.expression = IdentifierExpression.incomplete
+        self.isIncomplete = true
+    }
+    
+    init(name: String, expression: any ExpressionNode) {
+        self.name = name
+        self.expression = expression
+        self.isIncomplete = false
+    }
     
     func accept(_ visitor: any ASTVisitor) {
         visitor.visitVarDefinition(self)
@@ -125,12 +340,54 @@ enum TypeName {
 }
 
 struct FuncDefinition: TopLevelNode {
-    typealias Parameter = (name: String, type: TypeName)
     
-    var name: String
-    var type: TypeName
-    var parameters: [Parameter]
-    var body: [any BlockLevelNode]
+    struct Parameter {
+        let name: String
+        let type: TypeName
+        let isIncomplete: Bool
+        static var incomplete: Parameter {
+            return Parameter()
+        }
+        
+        private init() {
+            self.name = ""
+            self.type = .Int
+            self.isIncomplete = true
+        }
+        
+        init(name: String, type: TypeName) {
+            self.name = name
+            self.type = .Int 
+            self.isIncomplete = false
+        }
+    }
+    
+    let name: String
+    let type: TypeName
+    let parameters: [Parameter]
+    let body: [any BlockLevelNode]
+    
+    let isIncomplete: Bool
+    
+    static var incomplete: FuncDefinition {
+        return FuncDefinition()
+    }
+    
+    private init() {
+        self.name = ""
+        self.type = .Int
+        self.parameters = []
+        self.body = []
+        self.isIncomplete = true
+    }
+    
+    init(name: String, type: TypeName, parameters: [Parameter], body: [any BlockLevelNode]) {
+        self.name = name
+        self.type = type
+        self.parameters = parameters
+        self.body = body
+        self.isIncomplete = false
+    }
     
     func accept(_ visitor: any ASTVisitor) {
         visitor.visitFuncDefinition(self)
@@ -138,8 +395,26 @@ struct FuncDefinition: TopLevelNode {
 }
 
 struct FuncApplication: ExpressionNode, TopLevelNode {
-    var name: String
-    var arguments: [any ExpressionNode]
+    let name: String
+    let arguments: [any ExpressionNode]
+    
+    let isIncomplete: Bool
+    
+    static var incomplete: FuncApplication {
+        return FuncApplication()
+    }
+    
+    private init() {
+        self.name = ""
+        self.arguments = []
+        self.isIncomplete = true
+    }
+    
+    init(name: String, arguments: [any ExpressionNode]) {
+        self.name = name
+        self.arguments = arguments
+        self.isIncomplete = false
+    }
     
     func accept(_ visitor: any ASTVisitor) {
         visitor.visitFuncApplication(self)
@@ -147,9 +422,29 @@ struct FuncApplication: ExpressionNode, TopLevelNode {
 }
 
 struct IfStatement: StatementNode, BlockLevelNode {
-    var condition: any ExpressionNode
-    var thenBranch: [any BlockLevelNode]
-    var elseBranch: [any BlockLevelNode]
+    let condition: any ExpressionNode
+    let thenBranch: [any BlockLevelNode]
+    let elseBranch: [any BlockLevelNode]?
+    
+    let isIncomplete: Bool
+    
+    static var incomplete: IfStatement {
+        return IfStatement()
+    }
+    
+    private init() {
+        self.condition = IdentifierExpression.incomplete
+        self.thenBranch = []
+        self.elseBranch = nil
+        self.isIncomplete = true
+    }
+    
+    init(condition: any ExpressionNode, thenBranch: [any BlockLevelNode], elseBranch: [any BlockLevelNode]?) {
+        self.condition = condition
+        self.thenBranch = thenBranch
+        self.elseBranch = elseBranch
+        self.isIncomplete = false
+    }
     
     func accept(_ visitor: any ASTVisitor) {
         visitor.visitIfStatement(self)
@@ -157,9 +452,25 @@ struct IfStatement: StatementNode, BlockLevelNode {
 }
 
 struct ReturnStatement: StatementNode, BlockLevelNode {
-    var expression: any ExpressionNode
+    let expression: any ExpressionNode
+    
+    let isIncomplete: Bool
+    static var incomplete: ReturnStatement {
+        return ReturnStatement()
+    }
+    
+    private init() {
+        self.expression = IdentifierExpression.incomplete
+        self.isIncomplete = true
+    }
+    
+    init(expression: any ExpressionNode) {
+        self.expression = expression
+        self.isIncomplete = false
+    }
     
     func accept(_ visitor: any ASTVisitor) {
         visitor.visitReturnStatement(self)
     }
 }
+

@@ -43,6 +43,17 @@ public struct PeekableIterator<Element>: IteratorProtocol {
     public func isEmpty() -> Bool {
         return index == elements.count
     }
+    
+    public mutating func burn() {
+        if index < elements.count {
+            self.index += 1
+        }
+    }
+    
+    public func peek(ahead: Int) -> Element? {
+        guard index + (ahead - 1) < elements.count else { return nil }
+        return elements[index + (ahead - 1)]
+    }
 }
 
 extension Array {
@@ -57,5 +68,44 @@ extension Array {
         }
         
         return true
+    }
+}
+
+extension Array where Element == BlockLevelNode {
+    
+    var anyIncomplete: Bool {
+        for node in self {
+            if node.isIncomplete {
+                return true
+            }
+        }
+        
+        return false
+    }
+}
+
+extension Array where Element == FuncDefinition.Parameter {
+    
+    var anyIncomplete: Bool {
+        for parameter in self {
+            if parameter.isIncomplete {
+                return true
+            }
+        }
+        
+        return false
+    }
+}
+
+extension Array where Element == any ExpressionNode {
+    
+    var anyIncomplete: Bool {
+        for expression in self {
+            if expression.isIncomplete {
+                return true
+            }
+        }
+        
+        return false
     }
 }

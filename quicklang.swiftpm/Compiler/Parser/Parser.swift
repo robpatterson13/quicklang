@@ -77,6 +77,10 @@ class Parser {
         }
     }
     
+    private func handleUnrecoverable() -> Never {
+        fatalError()
+    }
+    
     private func recover(using strategy: RecoveryStrategy) {
         
         func dropUntil(_ set: RecoveryStrategy.RecoverySet) {
@@ -100,7 +104,7 @@ class Parser {
             return
             
         case .unrecoverable:
-            return
+            handleUnrecoverable()
             
         case .override(with: let newStrategy):
             recover(using: newStrategy)
@@ -124,7 +128,7 @@ class Parser {
             currentToken = token
         case .failure(let strategy):
             recover(using: strategy)
-            return FuncApplication.incomplete
+            return TopLevelNodeIncomplete.incomplete
         }
         
         switch currentToken {
@@ -142,22 +146,22 @@ class Parser {
         case .Boolean:
             let strategy = self.error(.expectedTopLevelStatement(got: .boolean))
             recover(using: strategy)
-            return FuncApplication.incomplete
+            return TopLevelNodeIncomplete.incomplete
             
         case .Number:
             let strategy =  self.error(.expectedTopLevelStatement(got: .number))
             recover(using: strategy)
-            return FuncApplication.incomplete
+            return TopLevelNodeIncomplete.incomplete
             
         case .Keyword(let val, _):
             let strategy = self.error(.expectedTopLevelStatement(got: .keyword(val)))
             recover(using: strategy)
-            return FuncApplication.incomplete
+            return TopLevelNodeIncomplete.incomplete
             
         case .Symbol(let val, _):
             let strategy = self.error(.expectedTopLevelStatement(got: .symbol(val)))
             recover(using: strategy)
-            return FuncApplication.incomplete
+            return TopLevelNodeIncomplete.incomplete
         }
     }
 
@@ -196,7 +200,7 @@ class Parser {
         }
         
         let parameters = parseFunctionParameters()
-        if parameters.anyIncomplete() {
+        if parameters.anyIncomplete {
             return .incomplete
         }
         
@@ -217,7 +221,7 @@ class Parser {
         }
         
         let body = parseBlock(in: .functionBody)
-        if body.anyIncomplete() {
+        if body.anyIncomplete {
             return .incomplete
         }
         
@@ -333,7 +337,7 @@ class Parser {
         }
         
         let thnBlock = parseBlock(in: .ifStatement)
-        guard !thnBlock.anyIncomplete() else {
+        guard !thnBlock.anyIncomplete else {
             return .incomplete
         }
         
@@ -344,7 +348,7 @@ class Parser {
         tokens.burn() // else
         
         let elsBlock = parseBlock(in: .ifStatement)
-        guard !elsBlock.anyIncomplete() else {
+        guard !elsBlock.anyIncomplete else {
             return .incomplete
         }
         
@@ -394,7 +398,7 @@ class Parser {
             currentToken = token
         case .failure(let strategy):
             recover(using: strategy)
-            return FuncApplication.incomplete
+            return BlockLevelNodeIncomplete.incomplete
         }
         
         switch currentToken {
@@ -418,22 +422,22 @@ class Parser {
         case .Boolean:
             let strategy = self.error(.expectedBlockBodyPart(got: .boolean))
             recover(using: strategy)
-            return FuncApplication.incomplete
+            return BlockLevelNodeIncomplete.incomplete
             
         case .Number:
             let strategy = self.error(.expectedBlockBodyPart(got: .number))
             recover(using: strategy)
-            return FuncApplication.incomplete
+            return BlockLevelNodeIncomplete.incomplete
             
         case .Keyword(let val, _):
             let strategy = self.error(.expectedBlockBodyPart(got: .keyword(val)))
             recover(using: strategy)
-            return FuncApplication.incomplete
+            return BlockLevelNodeIncomplete.incomplete
             
         case .Symbol(let val, _):
             let strategy = self.error(.expectedBlockBodyPart(got: .symbol(val)))
             recover(using: strategy)
-            return FuncApplication.incomplete
+            return BlockLevelNodeIncomplete.incomplete
             
         }
     }
@@ -505,7 +509,7 @@ class Parser {
     private func parseExpressionBeginning() -> any ExpressionNode {
         
         let currentToken: Token
-        let result = expect(else: .expectedExpression, burnToken: true)
+        let result = expect(else: .expectedExpression)
         switch result {
         case .success(let token):
             currentToken = token
@@ -516,10 +520,10 @@ class Parser {
         
         switch currentToken {
         case let .Identifier(id, _):
-            if let maybeParen = tokens.peekNext(), maybeParen == .LPAREN {
-                tokens.burn()
+            if let maybeParen = tokens.peek(ahead: 2), maybeParen == .LPAREN {
                 return parseFunctionApplication()
             } else {
+                tokens.burn()
                 return IdentifierExpression(name: id)
             }
             
@@ -539,12 +543,6 @@ class Parser {
     }
     
     private func parseExpression(until end: String, min: Int) -> any ExpressionNode {
-        
-        /// ```
-        /// Kladov, Alex. Simple but Powerful Pratt Parsing, 13 Apr. 2020,
-        /// matklad.github.io/2020/04/13/simple-but-powerful-pratt-parsing.html.
-        /// ```
-        enum Source { }
         
         var lhsNode = parseExpressionBeginning()
         if lhsNode.isIncomplete {

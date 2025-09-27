@@ -5,43 +5,57 @@
 //  Created by Rob Patterson on 2/4/25.
 //
 
-struct Compiler {
+protocol DiagnosticEngineDelegate: AnyObject {
+    func onError()
+}
+
+protocol DiagnosticEngine {
+    associatedtype PhaseErrorInfo
+    
+    var delegate: (any DiagnosticEngineDelegate)? { get set }
+    var errors: [PhaseErrorInfo] { get set }
+    
+    typealias ErrorReport = String
+    func dump() -> ErrorReport
+}
+
+class Compiler {
     var lexer: Lexer
     
-    let program = """
-                  func abc(param1: Int) -> Bool { 
-                    if (32) { 
-                        return 32;
-                    } else { 
-                        return 31;
-                    }
-                  }
-                  func i(abcdce: Bool, hello: Int) -> Int {
-                      if (2 * 3) {
-                        return 10 + 3 * 20;
-                      } else {
-                        return false + i();
-                      }
-                  }
-                  let value = 32;
-                  var value2 = true;
-                  abc(value);
-                  """
+    let diagnostics: [any DiagnosticEngine] = []
     
+    let program = """
+let value = 10 + true * 8 + i(16 * blue + another) - hello;
+"""
+//func abc(param1: Int) -> Bool {
+//    if (true) { 
+//        return true;
+//    } else { 
+//        return true;
+//    }
+//}
+//func i(abcdce: Bool, hello: Int) -> Int {
+//    if (true) {
+//        return true;
+//    } else {
+//        return false + i();
+//    }
+//}
+//let value = true;
+//var value2 = true;
+//abc(value);
+
     init() {
         self.lexer = Lexer(for: program)
         let lexed = try! lexer.tokenize()
         print(lexed)
         print("\n\n")
-        var parser = Parser(for: lexed)
+        let parser = Parser(for: lexed, manager: ParserErrorManager.default, recoverer: DefaultRecovery())
         
-        do {
-            print(try parser.beginParse())
-        } catch let e as Parser.ParseError {
-            print("\nError while parsing: \n\(program)\n\n")
-            print(e.message)
-        } catch {
-            print(error)
-        }
+        let result = parser.begin()
+        print(result)
+        print(result.sections.andmap { node in
+            node.anyIncomplete
+        })
     }
 }
