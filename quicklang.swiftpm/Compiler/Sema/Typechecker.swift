@@ -95,7 +95,12 @@ struct Typechecker: ASTVisitor {
     }
     
     func visitFuncApplication(_ expression: FuncApplication) {
-        let funcDef = context.getFuncParams(of: expression.name)
+        let params = context.getFuncParams(of: expression.name)
+        
+        for (idx, arg) in expression.arguments.enumerated()
+        where !isExpression(arg, type: params[idx].type) {
+            // MARK: Wrong arg type
+        }
         
         expression.arguments.forEach { $0.accept(self) }
     }
@@ -112,6 +117,5 @@ struct Typechecker: ASTVisitor {
     func visitReturnStatement(_ statement: ReturnStatement) {
         statement.expression.accept(self)
     }
-    
     
 }

@@ -27,11 +27,11 @@ class ASTContext {
     }
     
     func getFuncParams(of id: String) -> [FuncDefinition.Parameter] {
-        if let type = types[expr.id] {
-            return type
+        guard let params = symbols[id]?.params else {
+            fatalError("No func params available for \(id)")
         }
         
-        return askForType(of: expr)
+        return params
     }
     
     func queryTypeOfIdentifierExpression(_ expr: IdentifierExpression) {
