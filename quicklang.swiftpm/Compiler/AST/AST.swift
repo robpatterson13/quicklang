@@ -34,7 +34,7 @@ protocol ASTNode: Hashable, ASTNodeIncompletable {
     /// - Parameter visitor: The visitor to dispatch to.
     func acceptVisitor(_ visitor: any ASTVisitor)
     
-    func acceptTransformer(_ transformer: any ASTTransformer, _ finished: @escaping OnTransformEnd)
+    func acceptTransformer<T: ASTTransformer>(_ transformer: T, _ finished: @escaping T.OnTransformEnd<Self>)
 }
 
 extension ASTNode {
@@ -136,8 +136,12 @@ struct BlockLevelNodeIncomplete: BlockLevelNode {
         self.isIncomplete = true
     }
     
-    func accept(_ visitor: any ASTVisitor) {
+    func acceptVisitor(_ visitor: any ASTVisitor) {
         fatalError("Attempted to visit incomplete block-level node")
+    }
+    
+    func acceptTransformer<T: ASTTransformer>(_ transformer: T, _ finished: T.OnTransformEnd<Self>) {
+        fatalError("Attempted to transform incomplete block-level node")
     }
 }
 
@@ -160,8 +164,12 @@ struct TopLevelNodeIncomplete: TopLevelNode {
     
     var isIncomplete: Bool
     
-    func accept(_ visitor: any ASTVisitor) {
+    func acceptVisitor(_ visitor: any ASTVisitor) {
         fatalError("Attempted to visit incomplete top-level node")
+    }
+    
+    func acceptTransformer<T: ASTTransformer>(_ transformer: T, _ finished: T.OnTransformEnd<Self>) {
+        fatalError("Attempted to transform incomplete top-level node")
     }
 }
 
@@ -224,12 +232,19 @@ struct IdentifierExpression: ExpressionNode {
         self.isIncomplete = false
     }
     
-    func accept(_ visitor: any ASTVisitor) {
+    func acceptVisitor(_ visitor: any ASTVisitor) {
         visitor.visitIdentifierExpression(self)
     }
     
     func acceptTypeQuery(_ context: ASTContext) {
         context.queryTypeOfIdentifierExpression(self)
+    }
+    
+    func acceptTransformer<T: ASTTransformer>(
+        _ transformer: T,
+        _ finished: @escaping T.OnTransformEnd<IdentifierExpression>
+    ) {
+        transformer.visitIdentifierExpression(self, finished)
     }
 }
 
@@ -258,12 +273,19 @@ struct BooleanExpression: ExpressionNode {
         self.isIncomplete = false
     }
     
-    func accept(_ visitor: any ASTVisitor) {
+    func acceptVisitor(_ visitor: any ASTVisitor) {
         visitor.visitBooleanExpression(self)
     }
     
     func acceptTypeQuery(_ context: ASTContext) {
         context.queryTypeOfBooleanExpression(self)
+    }
+    
+    func acceptTransformer<T: ASTTransformer>(
+        _ transformer: T,
+        _ finished: @escaping T.OnTransformEnd<BooleanExpression>
+    ) {
+        transformer.visitBooleanExpression(self, finished)
     }
 }
 
@@ -292,12 +314,19 @@ struct NumberExpression: ExpressionNode {
         self.isIncomplete = false
     }
     
-    func accept(_ visitor: any ASTVisitor) {
+    func acceptVisitor(_ visitor: any ASTVisitor) {
         visitor.visitNumberExpression(self)
     }
     
     func acceptTypeQuery(_ context: ASTContext) {
         context.queryTypeOfNumberExpression(self)
+    }
+    
+    func acceptTransformer<T: ASTTransformer>(
+        _ transformer: T,
+        _ finished: @escaping T.OnTransformEnd<NumberExpression>
+    ) {
+        transformer.visitNumberExpression(self, finished)
     }
 }
 
@@ -337,12 +366,19 @@ struct UnaryOperation: ExpressionNode {
         self.isIncomplete = false
     }
     
-    func accept(_ visitor: any ASTVisitor) {
+    func acceptVisitor(_ visitor: any ASTVisitor) {
         visitor.visitUnaryOperation(self)
     }
     
     func acceptTypeQuery(_ context: ASTContext) {
         context.queryTypeOfUnaryOperation(self)
+    }
+    
+    func acceptTransformer<T: ASTTransformer>(
+        _ transformer: T,
+        _ finished: @escaping T.OnTransformEnd<UnaryOperation>
+    ) {
+        transformer.visitUnaryOperation(self, finished)
     }
 }
 
@@ -388,12 +424,19 @@ struct BinaryOperation: ExpressionNode {
         self.isIncomplete = false
     }
     
-    func accept(_ visitor: any ASTVisitor) {
+    func acceptVisitor(_ visitor: any ASTVisitor) {
         visitor.visitBinaryOperation(self)
     }
     
     func acceptTypeQuery(_ context: ASTContext) {
         context.queryTypeOfBinaryOperation(self)
+    }
+    
+    func acceptTransformer<T: ASTTransformer>(
+        _ transformer: T,
+        _ finished: @escaping T.OnTransformEnd<BinaryOperation>
+    ) {
+        transformer.visitBinaryOperation(self, finished)
     }
 }
 
@@ -432,8 +475,15 @@ struct LetDefinition: DefinitionNode  {
         self.isIncomplete = false
     }
     
-    func accept(_ visitor: any ASTVisitor) {
+    func acceptVisitor(_ visitor: any ASTVisitor) {
         visitor.visitLetDefinition(self)
+    }
+    
+    func acceptTransformer<T: ASTTransformer>(
+        _ transformer: T,
+        _ finished: @escaping T.OnTransformEnd<LetDefinition>
+    ) {
+        transformer.visitLetDefinition(self, finished)
     }
 }
 
@@ -472,8 +522,15 @@ struct VarDefinition: DefinitionNode {
         self.isIncomplete = false
     }
     
-    func accept(_ visitor: any ASTVisitor) {
+    func acceptVisitor(_ visitor: any ASTVisitor) {
         visitor.visitVarDefinition(self)
+    }
+    
+    func acceptTransformer<T: ASTTransformer>(
+        _ transformer: T,
+        _ finished: @escaping T.OnTransformEnd<VarDefinition>
+    ) {
+        transformer.visitVarDefinition(self, finished)
     }
 }
 
@@ -557,8 +614,15 @@ struct FuncDefinition: TopLevelNode {
         self.isIncomplete = false
     }
     
-    func accept(_ visitor: any ASTVisitor) {
+    func acceptVisitor(_ visitor: any ASTVisitor) {
         visitor.visitFuncDefinition(self)
+    }
+    
+    func acceptTransformer<T: ASTTransformer>(
+        _ transformer: T,
+        _ finished: @escaping T.OnTransformEnd<FuncDefinition>
+    ) {
+        transformer.visitFuncDefinition(self, finished)
     }
 }
 
@@ -593,12 +657,19 @@ struct FuncApplication: ExpressionNode, TopLevelNode {
         self.isIncomplete = false
     }
     
-    func accept(_ visitor: any ASTVisitor) {
+    func acceptVisitor(_ visitor: any ASTVisitor) {
         visitor.visitFuncApplication(self)
     }
     
     func acceptTypeQuery(_ context: ASTContext) {
         context.queryTypeOfFuncApplication(self)
+    }
+    
+    func acceptTransformer<T: ASTTransformer>(
+        _ transformer: T,
+        _ finished: @escaping T.OnTransformEnd<FuncApplication>
+    ) {
+        transformer.visitFuncApplication(self, finished)
     }
 }
 
@@ -638,8 +709,15 @@ struct IfStatement: StatementNode, BlockLevelNode {
         self.isIncomplete = false
     }
     
-    func accept(_ visitor: any ASTVisitor) {
+    func acceptVisitor(_ visitor: any ASTVisitor) {
         visitor.visitIfStatement(self)
+    }
+    
+    func acceptTransformer<T: ASTTransformer>(
+        _ transformer: T,
+        _ finished: @escaping T.OnTransformEnd<IfStatement>
+    ) {
+        transformer.visitIfStatement(self, finished)
     }
 }
 
@@ -667,8 +745,15 @@ struct ReturnStatement: StatementNode, BlockLevelNode {
         self.isIncomplete = false
     }
     
-    func accept(_ visitor: any ASTVisitor) {
+    func acceptVisitor(_ visitor: any ASTVisitor) {
         visitor.visitReturnStatement(self)
+    }
+    
+    func acceptTransformer<T: ASTTransformer>(
+        _ transformer: T,
+        _ finished: @escaping T.OnTransformEnd<ReturnStatement>
+    ) {
+        transformer.visitReturnStatement(self, finished)
     }
 }
 

@@ -270,9 +270,9 @@ class Parser {
     ///
     /// - Parameter usage: The context in which the block appears.
     /// - Returns: The parsed block elements.
-    private func parseBlock(in usage: BlockContext) -> [BlockLevelNode] {
+    private func parseBlock(in usage: BlockContext) -> [any BlockLevelNode] {
         
-        var bodyParts: [BlockLevelNode] = []
+        var bodyParts: [any BlockLevelNode] = []
         
         let recoverFromLBraceMissing = expectAndBurn(.LBRACE, else: .expectedLeftBrace(where: usage.errorTypeForLeft))
         if let recoverFromLBraceMissing {
