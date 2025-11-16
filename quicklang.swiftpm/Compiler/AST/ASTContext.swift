@@ -118,6 +118,10 @@ class ASTContext {
         }
     }
     
+    func addSymbolInfo(_ info: SymbolInfo, for id: String) {
+        symbols[id] = info
+    }
+    
     /// Requests an expression to compute and cache its type.
     ///
     /// - Parameter expr: The expression to query.

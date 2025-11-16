@@ -52,15 +52,21 @@ class ASTLinearize: ASTTransformer {
         _ operation: UnaryOperation,
         _ finished: @escaping OnTransformEnd<UnaryOperation>
     ) {
-        var newBindings: [any DefinitionNode]
-        var newExpr: any ExpressionNode
+        var newBindings: [any DefinitionNode] = []
+        var newExpr: (any ExpressionNode)? = nil
         operation.expression.acceptTransformer(self) { newExpression, bindings in
             newBindings.append(contentsOf: bindings)
             newExpr = newExpression
         }
         
+        guard let operand = newExpr else {
+            // Should not happen: child must synchronously invoke callback
+            finished(operation, newBindings)
+            return
+        }
+        
         let newName = genSym(root: "unary_op", id: operation.id)
-        let newOperation = UnaryOperation(op: operation.op, expression: newExpr)
+        let newOperation = UnaryOperation(op: operation.op, expression: operand)
         let newBinding = LetDefinition(name: newName, expression: newOperation)
         newBindings.append(newBinding)
         
@@ -75,21 +81,26 @@ class ASTLinearize: ASTTransformer {
         _ operation: BinaryOperation,
         _ finished: @escaping OnTransformEnd<BinaryOperation>
     ) {
-        var newBindings: [any DefinitionNode]
+        var newBindings: [any DefinitionNode] = []
         
-        var newLhsExpr: any ExpressionNode
+        var newLhsExpr: (any ExpressionNode)? = nil
         operation.lhs.acceptTransformer(self) { newLhs, bindings in
             newBindings.append(contentsOf: bindings)
             newLhsExpr = newLhs
         }
-        var newRhsExpr: any ExpressionNode
-        operation.lhs.acceptTransformer(self) { newRhs, bindings in
+        var newRhsExpr: (any ExpressionNode)? = nil
+        operation.rhs.acceptTransformer(self) { newRhs, bindings in
             newBindings.append(contentsOf: bindings)
             newRhsExpr = newRhs
         }
         
+        guard let lhs = newLhsExpr, let rhs = newRhsExpr else {
+            finished(operation, newBindings)
+            return
+        }
+        
         let newName = genSym(root: "binary_op", id: operation.id)
-        let newOperation = BinaryOperation(op: operation.op, lhs: newLhsExpr, rhs: newRhsExpr)
+        let newOperation = BinaryOperation(op: operation.op, lhs: lhs, rhs: rhs)
         let newBinding = LetDefinition(name: newName, expression: newOperation)
         newBindings.append(newBinding)
         
@@ -103,14 +114,19 @@ class ASTLinearize: ASTTransformer {
         _ definition: LetDefinition,
         _ finished: @escaping OnTransformEnd<LetDefinition>
     ) {
-        var newBindings: [any DefinitionNode]
-        var newBoundExpr: any ExpressionNode
+        var newBindings: [any DefinitionNode] = []
+        var newBoundExpr: (any ExpressionNode)? = nil
         definition.expression.acceptTransformer(self) { newExpression, bindings in
             newBindings.append(contentsOf: bindings)
             newBoundExpr = newExpression
         }
         
-        let newDefinition = LetDefinition(name: definition.name, expression: newBoundExpr)
+        guard let bound = newBoundExpr else {
+            finished(definition, newBindings)
+            return
+        }
+        
+        let newDefinition = LetDefinition(name: definition.name, expression: bound)
         finished(newDefinition, newBindings)
     }
     
@@ -121,14 +137,19 @@ class ASTLinearize: ASTTransformer {
         _ definition: VarDefinition,
         _ finished: @escaping OnTransformEnd<VarDefinition>
     ) {
-        var newBindings: [any DefinitionNode]
-        var newBoundExpr: any ExpressionNode
+        var newBindings: [any DefinitionNode] = []
+        var newBoundExpr: (any ExpressionNode)? = nil
         definition.expression.acceptTransformer(self) { newExpression, bindings in
             newBindings.append(contentsOf: bindings)
             newBoundExpr = newExpression
         }
         
-        let newDefinition = VarDefinition(name: definition.name, expression: newBoundExpr)
+        guard let bound = newBoundExpr else {
+            finished(definition, newBindings)
+            return
+        }
+        
+        let newDefinition = VarDefinition(name: definition.name, expression: bound)
         finished(newDefinition, newBindings)
     }
     
@@ -183,10 +204,15 @@ class ASTLinearize: ASTTransformer {
         _ finished: @escaping OnTransformEnd<IfStatement>
     ) {
         var bindings = [any DefinitionNode]()
-        var cond: any ExpressionNode
+        var cond: (any ExpressionNode)? = nil
         statement.condition.acceptTransformer(self) { newCond, newBindings in
             cond = newCond
             bindings.append(contentsOf: newBindings)
+        }
+        
+        guard let condition = cond else {
+            finished(statement, bindings)
+            return
         }
         
         let newThenBranch = linearizeBlock(statement.thenBranch)
@@ -195,7 +221,7 @@ class ASTLinearize: ASTTransformer {
             newElseBranch = linearizeBlock(elseBranch)
         }
         
-        let newIfStatement = IfStatement(condition: cond, thenBranch: newThenBranch, elseBranch: newElseBranch)
+        let newIfStatement = IfStatement(condition: condition, thenBranch: newThenBranch, elseBranch: newElseBranch)
         finished(newIfStatement, bindings)
     }
     
@@ -209,14 +235,19 @@ class ASTLinearize: ASTTransformer {
         // the only thing to worry about here is the returned expression;
         // we get the new return value (if necessary) and any new bindings
         // that the return expression introduced
-        var newBindings: [any DefinitionNode]
-        var newReturn: any ExpressionNode
+        var newBindings: [any DefinitionNode] = []
+        var newReturn: (any ExpressionNode)? = nil
         statement.expression.acceptTransformer(self) { newExpression, bindings in
             newBindings.append(contentsOf: bindings)
             newReturn = newExpression
         }
         
-        let newStatement = ReturnStatement(expression: newReturn)
+        guard let ret = newReturn else {
+            finished(statement, newBindings)
+            return
+        }
+        
+        let newStatement = ReturnStatement(expression: ret)
         finished(newStatement, newBindings)
     }
     
@@ -242,7 +273,7 @@ class ASTLinearize: ASTTransformer {
     /// temporaries ahead of transformed nodes.
     func linearize(_ ast: TopLevel) -> TopLevel {
         let sections = ast.sections
-        var transformedSections: [any TopLevelNode]
+        var transformedSections: [any TopLevelNode] = []
         
         sections.forEach { section in
             section.acceptTransformer(self) { transformed, bindings in
@@ -259,4 +290,3 @@ class ASTLinearize: ASTTransformer {
         return root + "$" + id.uuidString
     }
 }
-
