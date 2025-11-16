@@ -5,27 +5,37 @@
 //  Created by Rob Patterson on 2/16/25.
 //
 
+/// Performs static type checking over the AST.
 struct Typechecker: ASTVisitor {
     
+    /// Collected type errors.
     var errors: [Error] = []
+    
+    /// Context for querying types and symbols.
     let context: ASTContext
     
+    /// Checks whether an expression has an expected type.
     private func isExpression(_ expr: any ExpressionNode, type: TypeName) -> Bool {
         return type == context.getType(of: expr)
     }
     
+    /// Validates a definition against an optional annotation.
     private func checkDefinition(_ definition: any DefinitionNode) {
         if let type = definition.type, !isExpression(definition.expression, type: type) {
             // MARK: Definition has type
         }
     }
     
+    /// Visits an identifier expression.
     func visitIdentifierExpression(_ expression: IdentifierExpression) {}
     
+    /// Visits a boolean literal expression.
     func visitBooleanExpression(_ expression: BooleanExpression) {}
     
+    /// Visits a numeric literal expression.
     func visitNumberExpression(_ expression: NumberExpression) {}
     
+    /// Validates a unary operation’s operand type.
     func visitUnaryOperation(_ operation: UnaryOperation) {
         switch operation.op {
         case .not, .neg:
@@ -34,9 +44,10 @@ struct Typechecker: ASTVisitor {
             }
         }
         
-        operation.expression.accept(self)
+        operation.expression.acceptVisitor(self)
     }
     
+    /// Validates a binary operation’s operand types.
     func visitBinaryOperation(_ operation: BinaryOperation) {
         switch operation.op {
         case .plus, .minus, .times:
@@ -51,21 +62,24 @@ struct Typechecker: ASTVisitor {
             }
         }
         
-        operation.lhs.accept(self)
-        operation.rhs.accept(self)
+        operation.lhs.acceptVisitor(self)
+        operation.rhs.acceptVisitor(self)
     }
     
+    /// Validates a `let` definition.
     func visitLetDefinition(_ definition: LetDefinition) {
         checkDefinition(definition)
     }
     
+    /// Validates a `var` definition.
     func visitVarDefinition(_ definition: VarDefinition) {
         checkDefinition(definition)
     }
     
+    /// Validates a function definition, including return semantics.
     func visitFuncDefinition(_ definition: FuncDefinition) {
         // do the body of the definition first
-        definition.body.forEach { $0.accept(self) }
+        definition.body.forEach { $0.acceptVisitor(self) }
         
         // then type check the function definition + returned value
         let returnType = definition.type
@@ -94,6 +108,7 @@ struct Typechecker: ASTVisitor {
         }
     }
     
+    /// Validates a function application’s argument types.
     func visitFuncApplication(_ expression: FuncApplication) {
         let params = context.getFuncParams(of: expression.name)
         
@@ -102,20 +117,22 @@ struct Typechecker: ASTVisitor {
             // MARK: Wrong arg type
         }
         
-        expression.arguments.forEach { $0.accept(self) }
+        expression.arguments.forEach { $0.acceptVisitor(self) }
     }
     
+    /// Validates an `if` statement’s condition and branches.
     func visitIfStatement(_ statement: IfStatement) {
         if !isExpression(statement.condition, type: .Bool) {
             // MARK: Condition of if statement must be Bool, is <other type>
         }
         
-        statement.thenBranch.forEach { $0.accept(self) }
-        statement.elseBranch?.forEach { $0.accept(self) }
+        statement.thenBranch.forEach { $0.acceptVisitor(self) }
+        statement.elseBranch?.forEach { $0.acceptVisitor(self) }
     }
     
+    /// Visits a `return` statement.
     func visitReturnStatement(_ statement: ReturnStatement) {
-        statement.expression.accept(self)
+        statement.expression.acceptVisitor(self)
     }
     
 }

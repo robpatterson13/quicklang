@@ -51,7 +51,7 @@ abc(value);
         let lexed = try! lexer.tokenize()
         print(lexed)
         print("\n\n")
-        let parser = Parser(for: lexed, manager: ParserErrorManager.default, recoverer: DefaultRecovery.shared)
+        let parser = Parser(for: consume lexed, manager: ParserErrorManager.default, recoverer: DefaultRecovery.shared)
         
         let result = parser.begin()
         print(result)

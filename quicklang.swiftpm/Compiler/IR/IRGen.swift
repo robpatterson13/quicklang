@@ -5,7 +5,11 @@
 //  Created by Rob Patterson on 11/14/25.
 //
 
-class IRGen {
+class IRGen: ASTTransformer {
+    
+    func transform(_ ast: TopLevel) -> IRTopLevel {
+        <#code#>
+    }
     
     private func lowerExpression(_ expr: any ExpressionNode) -> IRExpression {
         switch expr {
@@ -126,6 +130,4 @@ class IRGen {
         let value = lowerExpression(statement.expression)
         return IRReturnStatement(val: value)
     }
-    
-    typealias ASTVisitResult = any IRNode
 }
