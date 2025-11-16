@@ -29,6 +29,14 @@ protocol RecoveryEngine {
 
 class DefaultRecovery: RecoveryEngine {
     
+    static var shared: DefaultRecovery {
+        DefaultRecovery()
+    }
+    
+    private init() {
+        
+    }
+    
     private func expectedTypeIdentifier(
         _ info: ExpectedTypeIdentifierErrorInfo.ErrorType
     ) -> RecoveryStrategy {

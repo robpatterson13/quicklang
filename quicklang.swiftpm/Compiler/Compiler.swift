@@ -24,33 +24,34 @@ class Compiler {
     
     let diagnostics: [any DiagnosticEngine] = []
     
-    let program = """
-let value = 10 + true * 8 + i(16 * blue + another) - hello;
+    let program =
 """
-//func abc(param1: Int) -> Bool {
-//    if (true) { 
-//        return true;
-//    } else { 
-//        return true;
-//    }
-//}
-//func i(abcdce: Bool, hello: Int) -> Int {
-//    if (true) {
-//        return true;
-//    } else {
-//        return false + i();
-//    }
-//}
-//let value = true;
-//var value2 = true;
-//abc(value);
+func abc(param1: Int) -> Bool {
+    if (true) { 
+        return true;
+    } else { 
+        return true;
+    }
+}
+func i(abcdce: Bool, hello: Int) -> Int {
+    if (true) {
+        return true;
+    } else {
+        return false + i();
+    }
+}
+let value = true;
+var value2 = true;
+abc(value);
+"""
+//    let value = 10 + true * 8 + i(16 * blue + another) - hello;
 
     init() {
         self.lexer = Lexer(for: program)
         let lexed = try! lexer.tokenize()
         print(lexed)
         print("\n\n")
-        let parser = Parser(for: lexed, manager: ParserErrorManager.default, recoverer: DefaultRecovery())
+        let parser = Parser(for: lexed, manager: ParserErrorManager.default, recoverer: DefaultRecovery.shared)
         
         let result = parser.begin()
         print(result)

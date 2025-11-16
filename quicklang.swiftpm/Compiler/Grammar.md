@@ -25,7 +25,8 @@ func-def ::= `func` \<identifier\>`(`\<func-param\> ...`)` `->` \<type\> `{` \<s
 func-param ::= \<identifier\>`:` \<type\>
       
 type ::= Int \
-       | Bool
+       | Bool \
+       | String
        
 stmt-or-def ::= \<stmt\> \
               | \<def\>

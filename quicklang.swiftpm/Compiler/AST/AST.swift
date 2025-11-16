@@ -5,32 +5,27 @@
 //  Created by Rob Patterson on 2/11/25.
 //
 
-protocol ASTVisitor {
-    associatedtype ASTVisitResult
-    
-    func visitIdentifierExpression(_ expression: IdentifierExpression) -> ASTVisitResult
-    func visitBooleanExpression(_ expression: BooleanExpression) -> ASTVisitResult
-    func visitNumberExpression(_ expression: NumberExpression) -> ASTVisitResult
-    
-    func visitUnaryOperation(_ operation: UnaryOperation) -> ASTVisitResult
-    func visitBinaryOperation(_ operation: BinaryOperation) -> ASTVisitResult
-    
-    func visitLetDefinition(_ definition: LetDefinition) -> ASTVisitResult
-    func visitVarDefinition(_ definition: VarDefinition) -> ASTVisitResult
-    
-    func visitFuncDefinition(_ definition: FuncDefinition) -> ASTVisitResult
-    func visitFuncApplication(_ expression: FuncApplication) -> ASTVisitResult
-    
-    func visitIfStatement(_ statement: IfStatement) -> ASTVisitResult
-    func visitReturnStatement(_ statement: ReturnStatement) -> ASTVisitResult
-}
+import Foundation
 
-protocol ASTNode: ~Copyable {
+protocol ASTNodeIncompletable {
     var isIncomplete: Bool { get }
     var anyIncomplete: Bool { get }
     static var incomplete: Self { get }
-    
-    consuming func accept(_ visitor: any ASTVisitor)
+}
+
+protocol ASTNode: Hashable, ASTNodeIncompletable {
+    var id: UUID { get }
+    func accept(_ visitor: any ASTVisitor)
+}
+
+extension ASTNode {
+    static func == (lhs: Self, rhs: Self) -> Bool {
+        lhs.id == rhs.id
+    }
+
+    func hash(into hasher: inout Hasher) {
+        hasher.combine(id)
+    }
 }
 
 extension ASTNode {
@@ -85,12 +80,15 @@ extension ASTNode {
 }
 
 struct TopLevel {
-    var sections: [TopLevelNode]
+    var sections: [any TopLevelNode]
 }
 
-protocol BlockLevelNode: ASTNode { }
+protocol BlockLevelNode: ASTNode {
+    
+}
 
 struct BlockLevelNodeIncomplete: BlockLevelNode {
+    let id = UUID()
     var isIncomplete: Bool
     
     static var incomplete: BlockLevelNodeIncomplete {
@@ -101,13 +99,15 @@ struct BlockLevelNodeIncomplete: BlockLevelNode {
         self.isIncomplete = true
     }
     
-    consuming func accept(_ visitor: any ASTVisitor) {
+    func accept(_ visitor: any ASTVisitor) {
+        fatalError("Attempted to visit incomplete block-level node")
     }
 }
 
 protocol TopLevelNode: BlockLevelNode { }
 
 struct TopLevelNodeIncomplete: TopLevelNode {
+    let id = UUID()
     static var incomplete: TopLevelNodeIncomplete {
         TopLevelNodeIncomplete()
     }
@@ -119,7 +119,7 @@ struct TopLevelNodeIncomplete: TopLevelNode {
     var isIncomplete: Bool
     
     func accept(_ visitor: any ASTVisitor) {
-        
+        fatalError("Attempted to visit incomplete top-level node")
     }
 }
 
@@ -130,16 +130,20 @@ extension TopLevelNode {
     }
 }
 
-protocol ExpressionNode: ASTNode { }
+protocol ExpressionNode: ASTNode {
+    func acceptTypeQuery(_ context: ASTContext)
+}
 
 protocol DefinitionNode: TopLevelNode {
     var name: String { get }
+    var type: TypeName? { get }
     var expression: any ExpressionNode { get }
 }
 
 protocol StatementNode: BlockLevelNode { }
 
 struct IdentifierExpression: ExpressionNode {
+    let id = UUID()
     let name: String
     
     let isIncomplete: Bool
@@ -161,9 +165,14 @@ struct IdentifierExpression: ExpressionNode {
     func accept(_ visitor: any ASTVisitor) {
         visitor.visitIdentifierExpression(self)
     }
+    
+    func acceptTypeQuery(_ context: ASTContext) {
+        context.queryTypeOfIdentifierExpression(self)
+    }
 }
 
 struct BooleanExpression: ExpressionNode {
+    let id = UUID()
     let value: Bool
     
     let isIncomplete: Bool
@@ -185,9 +194,14 @@ struct BooleanExpression: ExpressionNode {
     func accept(_ visitor: any ASTVisitor) {
         visitor.visitBooleanExpression(self)
     }
+    
+    func acceptTypeQuery(_ context: ASTContext) {
+        context.queryTypeOfBooleanExpression(self)
+    }
 }
 
 struct NumberExpression: ExpressionNode {
+    let id = UUID()
     let value: Int
     
     let isIncomplete: Bool
@@ -209,9 +223,15 @@ struct NumberExpression: ExpressionNode {
     func accept(_ visitor: any ASTVisitor) {
         visitor.visitNumberExpression(self)
     }
+    
+    func acceptTypeQuery(_ context: ASTContext) {
+        context.queryTypeOfNumberExpression(self)
+    }
 }
 
 struct UnaryOperation: ExpressionNode {
+    let id = UUID()
+    
     let op: Operator
     enum Operator {
         case not
@@ -240,9 +260,14 @@ struct UnaryOperation: ExpressionNode {
     func accept(_ visitor: any ASTVisitor) {
         visitor.visitUnaryOperation(self)
     }
+    
+    func acceptTypeQuery(_ context: ASTContext) {
+        context.queryTypeOfUnaryOperation(self)
+    }
 }
 
 struct BinaryOperation: ExpressionNode {
+    let id = UUID()
     let op: Operator
     enum Operator {
         case plus
@@ -252,7 +277,7 @@ struct BinaryOperation: ExpressionNode {
         case and
         case or
     }
-    let lhs, rhs: ExpressionNode
+    let lhs, rhs: any ExpressionNode
     
     let isIncomplete: Bool
     
@@ -267,20 +292,26 @@ struct BinaryOperation: ExpressionNode {
         self.isIncomplete = true
     }
     
-    init(op: Operator, lhs: ExpressionNode, rhs: ExpressionNode) {
+    init(op: Operator, lhs: any ExpressionNode, rhs: any ExpressionNode) {
         self.op = op
         self.lhs = lhs
         self.rhs = rhs
         self.isIncomplete = false
     }
     
-    consuming func accept(_ visitor: any ASTVisitor) {
-        visitor.visitBinaryOperation(consume self)
+    func accept(_ visitor: any ASTVisitor) {
+        visitor.visitBinaryOperation(self)
+    }
+    
+    func acceptTypeQuery(_ context: ASTContext) {
+        context.queryTypeOfBinaryOperation(self)
     }
 }
 
 struct LetDefinition: DefinitionNode  {
+    let id = UUID()
     let name: String
+    let type: TypeName?
     let expression: any ExpressionNode
     
     let isIncomplete: Bool
@@ -291,12 +322,14 @@ struct LetDefinition: DefinitionNode  {
     
     private init() {
         self.name = ""
+        self.type = nil
         self.expression = IdentifierExpression.incomplete
         self.isIncomplete = true
     }
     
     init(name: String, expression: any ExpressionNode) {
         self.name = name
+        self.type = nil
         self.expression = expression
         self.isIncomplete = false
     }
@@ -307,7 +340,9 @@ struct LetDefinition: DefinitionNode  {
 }
 
 struct VarDefinition: DefinitionNode {
+    let id = UUID()
     let name: String
+    let type: TypeName?
     let expression: any ExpressionNode
     
     let isIncomplete: Bool
@@ -318,12 +353,14 @@ struct VarDefinition: DefinitionNode {
     
     private init() {
         self.name = ""
+        self.type = nil
         self.expression = IdentifierExpression.incomplete
         self.isIncomplete = true
     }
     
     init(name: String, expression: any ExpressionNode) {
         self.name = name
+        self.type = nil
         self.expression = expression
         self.isIncomplete = false
     }
@@ -337,6 +374,7 @@ enum TypeName {
     case Bool
     case Int
     case String
+    case Void
 }
 
 struct FuncDefinition: TopLevelNode {
@@ -357,11 +395,12 @@ struct FuncDefinition: TopLevelNode {
         
         init(name: String, type: TypeName) {
             self.name = name
-            self.type = .Int 
+            self.type = type
             self.isIncomplete = false
         }
     }
     
+    let id = UUID()
     let name: String
     let type: TypeName
     let parameters: [Parameter]
@@ -395,6 +434,7 @@ struct FuncDefinition: TopLevelNode {
 }
 
 struct FuncApplication: ExpressionNode, TopLevelNode {
+    let id = UUID()
     let name: String
     let arguments: [any ExpressionNode]
     
@@ -419,9 +459,14 @@ struct FuncApplication: ExpressionNode, TopLevelNode {
     func accept(_ visitor: any ASTVisitor) {
         visitor.visitFuncApplication(self)
     }
+    
+    func acceptTypeQuery(_ context: ASTContext) {
+        context.queryTypeOfFuncApplication(self)
+    }
 }
 
 struct IfStatement: StatementNode, BlockLevelNode {
+    let id = UUID()
     let condition: any ExpressionNode
     let thenBranch: [any BlockLevelNode]
     let elseBranch: [any BlockLevelNode]?
@@ -452,6 +497,7 @@ struct IfStatement: StatementNode, BlockLevelNode {
 }
 
 struct ReturnStatement: StatementNode, BlockLevelNode {
+    let id = UUID()
     let expression: any ExpressionNode
     
     let isIncomplete: Bool
@@ -473,4 +519,3 @@ struct ReturnStatement: StatementNode, BlockLevelNode {
         visitor.visitReturnStatement(self)
     }
 }
-
