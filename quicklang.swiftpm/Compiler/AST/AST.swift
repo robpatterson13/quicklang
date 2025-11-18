@@ -34,7 +34,9 @@ protocol ASTNode: Hashable, ASTNodeIncompletable {
     /// - Parameter visitor: The visitor to dispatch to.
     func acceptVisitor(_ visitor: any ASTVisitor)
     
-    func acceptTransformer<T: ASTTransformer>(_ transformer: T, _ finished: @escaping T.OnTransformEnd<Self>)
+    func acceptUpwardTransformer<T: ASTUpwardTransformer>(_ transformer: T, _ finished: @escaping T.OnTransformEnd<Self>)
+    
+    func acceptDownwardTransformer<T: ASTDownwardTransformer>(_ transformer: T, _ info: T.TransformationInfo)
 }
 
 extension ASTNode {
@@ -140,7 +142,11 @@ struct BlockLevelNodeIncomplete: BlockLevelNode {
         fatalError("Attempted to visit incomplete block-level node")
     }
     
-    func acceptTransformer<T: ASTTransformer>(_ transformer: T, _ finished: T.OnTransformEnd<Self>) {
+    func acceptUpwardTransformer<T: ASTUpwardTransformer>(_ transformer: T, _ finished: T.OnTransformEnd<Self>) {
+        fatalError("Attempted to transform incomplete block-level node")
+    }
+    
+    func acceptDownwardTransformer<T: ASTDownwardTransformer>(_ transformer: T, _ info: T.TransformationInfo) {
         fatalError("Attempted to transform incomplete block-level node")
     }
 }
@@ -168,7 +174,11 @@ struct TopLevelNodeIncomplete: TopLevelNode {
         fatalError("Attempted to visit incomplete top-level node")
     }
     
-    func acceptTransformer<T: ASTTransformer>(_ transformer: T, _ finished: T.OnTransformEnd<Self>) {
+    func acceptUpwardTransformer<T: ASTUpwardTransformer>(_ transformer: T, _ finished: T.OnTransformEnd<Self>) {
+        fatalError("Attempted to transform incomplete top-level node")
+    }
+    
+    func acceptDownwardTransformer<T: ASTDownwardTransformer>(_ transformer: T, _ info: T.TransformationInfo) {
         fatalError("Attempted to transform incomplete top-level node")
     }
 }
@@ -240,11 +250,18 @@ struct IdentifierExpression: ExpressionNode {
         context.queryTypeOfIdentifierExpression(self)
     }
     
-    func acceptTransformer<T: ASTTransformer>(
+    func acceptUpwardTransformer<T: ASTUpwardTransformer>(
         _ transformer: T,
         _ finished: @escaping T.OnTransformEnd<IdentifierExpression>
     ) {
         transformer.visitIdentifierExpression(self, finished)
+    }
+    
+    func acceptDownwardTransformer<T: ASTDownwardTransformer>(
+        _ transformer: T,
+        _ info: T.TransformationInfo
+    ) {
+        transformer.visitIdentifierExpression(self, info)
     }
 }
 
@@ -281,11 +298,18 @@ struct BooleanExpression: ExpressionNode {
         context.queryTypeOfBooleanExpression(self)
     }
     
-    func acceptTransformer<T: ASTTransformer>(
+    func acceptUpwardTransformer<T: ASTUpwardTransformer>(
         _ transformer: T,
         _ finished: @escaping T.OnTransformEnd<BooleanExpression>
     ) {
         transformer.visitBooleanExpression(self, finished)
+    }
+    
+    func acceptDownwardTransformer<T: ASTDownwardTransformer>(
+        _ transformer: T,
+        _ info: T.TransformationInfo
+    ) {
+        transformer.visitBooleanExpression(self, info)
     }
 }
 
@@ -322,11 +346,18 @@ struct NumberExpression: ExpressionNode {
         context.queryTypeOfNumberExpression(self)
     }
     
-    func acceptTransformer<T: ASTTransformer>(
+    func acceptUpwardTransformer<T: ASTUpwardTransformer>(
         _ transformer: T,
         _ finished: @escaping T.OnTransformEnd<NumberExpression>
     ) {
         transformer.visitNumberExpression(self, finished)
+    }
+    
+    func acceptDownwardTransformer<T: ASTDownwardTransformer>(
+        _ transformer: T,
+        _ info: T.TransformationInfo
+    ) {
+        transformer.visitNumberExpression(self, info)
     }
 }
 
@@ -374,11 +405,18 @@ struct UnaryOperation: ExpressionNode {
         context.queryTypeOfUnaryOperation(self)
     }
     
-    func acceptTransformer<T: ASTTransformer>(
+    func acceptUpwardTransformer<T: ASTUpwardTransformer>(
         _ transformer: T,
         _ finished: @escaping T.OnTransformEnd<UnaryOperation>
     ) {
         transformer.visitUnaryOperation(self, finished)
+    }
+    
+    func acceptDownwardTransformer<T: ASTDownwardTransformer>(
+        _ transformer: T,
+        _ info: T.TransformationInfo
+    ) {
+        transformer.visitUnaryOperation(self, info)
     }
 }
 
@@ -432,11 +470,18 @@ struct BinaryOperation: ExpressionNode {
         context.queryTypeOfBinaryOperation(self)
     }
     
-    func acceptTransformer<T: ASTTransformer>(
+    func acceptUpwardTransformer<T: ASTUpwardTransformer>(
         _ transformer: T,
         _ finished: @escaping T.OnTransformEnd<BinaryOperation>
     ) {
         transformer.visitBinaryOperation(self, finished)
+    }
+    
+    func acceptDownwardTransformer<T: ASTDownwardTransformer>(
+        _ transformer: T,
+        _ info: T.TransformationInfo
+    ) {
+        transformer.visitBinaryOperation(self, info)
     }
 }
 
@@ -479,11 +524,18 @@ struct LetDefinition: DefinitionNode  {
         visitor.visitLetDefinition(self)
     }
     
-    func acceptTransformer<T: ASTTransformer>(
+    func acceptUpwardTransformer<T: ASTUpwardTransformer>(
         _ transformer: T,
         _ finished: @escaping T.OnTransformEnd<LetDefinition>
     ) {
         transformer.visitLetDefinition(self, finished)
+    }
+    
+    func acceptDownwardTransformer<T: ASTDownwardTransformer>(
+        _ transformer: T,
+        _ info: T.TransformationInfo
+    ) {
+        transformer.visitLetDefinition(self, info)
     }
 }
 
@@ -526,11 +578,18 @@ struct VarDefinition: DefinitionNode {
         visitor.visitVarDefinition(self)
     }
     
-    func acceptTransformer<T: ASTTransformer>(
+    func acceptUpwardTransformer<T: ASTUpwardTransformer>(
         _ transformer: T,
         _ finished: @escaping T.OnTransformEnd<VarDefinition>
     ) {
         transformer.visitVarDefinition(self, finished)
+    }
+    
+    func acceptDownwardTransformer<T: ASTDownwardTransformer>(
+        _ transformer: T,
+        _ info: T.TransformationInfo
+    ) {
+        transformer.visitVarDefinition(self, info)
     }
 }
 
@@ -618,11 +677,18 @@ struct FuncDefinition: TopLevelNode {
         visitor.visitFuncDefinition(self)
     }
     
-    func acceptTransformer<T: ASTTransformer>(
+    func acceptUpwardTransformer<T: ASTUpwardTransformer>(
         _ transformer: T,
         _ finished: @escaping T.OnTransformEnd<FuncDefinition>
     ) {
         transformer.visitFuncDefinition(self, finished)
+    }
+    
+    func acceptDownwardTransformer<T: ASTDownwardTransformer>(
+        _ transformer: T,
+        _ info: T.TransformationInfo
+    ) {
+        transformer.visitFuncDefinition(self, info)
     }
 }
 
@@ -665,11 +731,18 @@ struct FuncApplication: ExpressionNode, TopLevelNode {
         context.queryTypeOfFuncApplication(self)
     }
     
-    func acceptTransformer<T: ASTTransformer>(
+    func acceptUpwardTransformer<T: ASTUpwardTransformer>(
         _ transformer: T,
         _ finished: @escaping T.OnTransformEnd<FuncApplication>
     ) {
         transformer.visitFuncApplication(self, finished)
+    }
+    
+    func acceptDownwardTransformer<T: ASTDownwardTransformer>(
+        _ transformer: T,
+        _ info: T.TransformationInfo
+    ) {
+        transformer.visitFuncApplication(self, info)
     }
 }
 
@@ -713,11 +786,18 @@ struct IfStatement: StatementNode, BlockLevelNode {
         visitor.visitIfStatement(self)
     }
     
-    func acceptTransformer<T: ASTTransformer>(
+    func acceptUpwardTransformer<T: ASTUpwardTransformer>(
         _ transformer: T,
         _ finished: @escaping T.OnTransformEnd<IfStatement>
     ) {
         transformer.visitIfStatement(self, finished)
+    }
+    
+    func acceptDownwardTransformer<T: ASTDownwardTransformer>(
+        _ transformer: T,
+        _ info: T.TransformationInfo
+    ) {
+        transformer.visitIfStatement(self, info)
     }
 }
 
@@ -749,11 +829,18 @@ struct ReturnStatement: StatementNode, BlockLevelNode {
         visitor.visitReturnStatement(self)
     }
     
-    func acceptTransformer<T: ASTTransformer>(
+    func acceptUpwardTransformer<T: ASTUpwardTransformer>(
         _ transformer: T,
         _ finished: @escaping T.OnTransformEnd<ReturnStatement>
     ) {
         transformer.visitReturnStatement(self, finished)
+    }
+    
+    func acceptDownwardTransformer<T: ASTDownwardTransformer>(
+        _ transformer: T,
+        _ info: T.TransformationInfo
+    ) {
+        transformer.visitReturnStatement(self, info)
     }
 }
 

@@ -12,7 +12,7 @@ import Foundation
 /// This pass preserves original semantics while introducing intermediate
 /// bindings where needed so later phases can assume expressions are evaluated
 /// in a simple, statement-like order.
-class ASTLinearize: ASTTransformer {
+class ASTLinearize: ASTUpwardTransformer {
     
     /// Per-visit auxiliary information produced during transformation.
     ///
@@ -54,7 +54,7 @@ class ASTLinearize: ASTTransformer {
     ) {
         var newBindings: [any DefinitionNode] = []
         var newExpr: (any ExpressionNode)? = nil
-        operation.expression.acceptTransformer(self) { newExpression, bindings in
+        operation.expression.acceptUpwardTransformer(self) { newExpression, bindings in
             newBindings.append(contentsOf: bindings)
             newExpr = newExpression
         }
@@ -84,12 +84,12 @@ class ASTLinearize: ASTTransformer {
         var newBindings: [any DefinitionNode] = []
         
         var newLhsExpr: (any ExpressionNode)? = nil
-        operation.lhs.acceptTransformer(self) { newLhs, bindings in
+        operation.lhs.acceptUpwardTransformer(self) { newLhs, bindings in
             newBindings.append(contentsOf: bindings)
             newLhsExpr = newLhs
         }
         var newRhsExpr: (any ExpressionNode)? = nil
-        operation.rhs.acceptTransformer(self) { newRhs, bindings in
+        operation.rhs.acceptUpwardTransformer(self) { newRhs, bindings in
             newBindings.append(contentsOf: bindings)
             newRhsExpr = newRhs
         }
@@ -116,7 +116,7 @@ class ASTLinearize: ASTTransformer {
     ) {
         var newBindings: [any DefinitionNode] = []
         var newBoundExpr: (any ExpressionNode)? = nil
-        definition.expression.acceptTransformer(self) { newExpression, bindings in
+        definition.expression.acceptUpwardTransformer(self) { newExpression, bindings in
             newBindings.append(contentsOf: bindings)
             newBoundExpr = newExpression
         }
@@ -139,7 +139,7 @@ class ASTLinearize: ASTTransformer {
     ) {
         var newBindings: [any DefinitionNode] = []
         var newBoundExpr: (any ExpressionNode)? = nil
-        definition.expression.acceptTransformer(self) { newExpression, bindings in
+        definition.expression.acceptUpwardTransformer(self) { newExpression, bindings in
             newBindings.append(contentsOf: bindings)
             newBoundExpr = newExpression
         }
@@ -182,7 +182,7 @@ class ASTLinearize: ASTTransformer {
         var bindings = [any DefinitionNode]()
         var args = [any ExpressionNode]()
         expression.arguments.forEach { arg in
-            arg.acceptTransformer(self) { newArg, newBindings in
+            arg.acceptUpwardTransformer(self) { newArg, newBindings in
                 bindings.append(contentsOf: newBindings)
                 args.append(newArg)
             }
@@ -205,7 +205,7 @@ class ASTLinearize: ASTTransformer {
     ) {
         var bindings = [any DefinitionNode]()
         var cond: (any ExpressionNode)? = nil
-        statement.condition.acceptTransformer(self) { newCond, newBindings in
+        statement.condition.acceptUpwardTransformer(self) { newCond, newBindings in
             cond = newCond
             bindings.append(contentsOf: newBindings)
         }
@@ -237,7 +237,7 @@ class ASTLinearize: ASTTransformer {
         // that the return expression introduced
         var newBindings: [any DefinitionNode] = []
         var newReturn: (any ExpressionNode)? = nil
-        statement.expression.acceptTransformer(self) { newExpression, bindings in
+        statement.expression.acceptUpwardTransformer(self) { newExpression, bindings in
             newBindings.append(contentsOf: bindings)
             newReturn = newExpression
         }
@@ -258,7 +258,7 @@ class ASTLinearize: ASTTransformer {
         var newBlock = [any BlockLevelNode]()
         
         block.forEach { node in
-            node.acceptTransformer(self) { newNode, newBindings in
+            node.acceptUpwardTransformer(self) { newNode, newBindings in
                 newBlock.append(contentsOf: newBindings)
                 newBlock.append(newNode)
             }
@@ -276,7 +276,7 @@ class ASTLinearize: ASTTransformer {
         var transformedSections: [any TopLevelNode] = []
         
         sections.forEach { section in
-            section.acceptTransformer(self) { transformed, bindings in
+            section.acceptUpwardTransformer(self) { transformed, bindings in
                 transformedSections.append(contentsOf: bindings)
                 transformedSections.append(transformed)
             }
