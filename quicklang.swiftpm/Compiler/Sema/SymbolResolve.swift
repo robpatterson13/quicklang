@@ -93,6 +93,7 @@ class SymbolResolve: ASTDownwardTransformer {
     
     typealias BindingInScope = String
     
+    private let grabber = SymbolGrabber()
     let context: ASTContext
     
     init(context: ASTContext) {
@@ -194,7 +195,6 @@ class SymbolResolve: ASTDownwardTransformer {
         _ info: TransformationInfo
     ) {
         var mutInfo = info
-        let grabber = SymbolGrabber()
         block.forEach { node in
             node.acceptDownwardTransformer(self, mutInfo)
             node.acceptUpwardTransformer(grabber) { _, bindings in
