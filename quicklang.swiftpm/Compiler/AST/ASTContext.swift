@@ -7,32 +7,56 @@
 
 import Foundation
 
-/// Holds contextual information for semantic analysis and type queries.
 class ASTContext {
     
     struct ScopeInfo {
         let inScope: [String]
     }
     
-    /// Metadata for a declared symbol.
     struct SymbolInfo {
-        /// The AST node identifier that introduced this symbol.
-        let id: UUID
-        /// Function parameters when this symbol represents a function.
-        let params: [FuncDefinition.Parameter]?
+        let id: UUID?
+        let type: TypeName?
+        let scopeInfo: ScopeInfo?
         
-        let scopeInfo: ScopeInfo
+        typealias Parameters = [FuncDefinition.Parameter]
+        let params: Parameters?
+        
+        init(
+            id: UUID? = nil,
+            type: TypeName? = nil,
+            scopeInfo: ScopeInfo? = nil,
+            params: Parameters? = nil
+        ) {
+            self.id = id
+            self.type = type
+            self.scopeInfo = scopeInfo
+            self.params = params
+        }
+        
+        func makeNew(
+            id: UUID? = nil,
+            type: TypeName? = nil,
+            scopeInfo: ScopeInfo? = nil,
+            params: Parameters? = nil
+        ) -> SymbolInfo {
+            let newId = id == nil ? self.id : id!
+            let newType = type == nil ? self.type : type!
+            let newScopeInfo = scopeInfo == nil ? self.scopeInfo : scopeInfo!
+            let params = params == nil ? self.params : params!
+            
+            return SymbolInfo(id: newId, type: newType, scopeInfo: newScopeInfo, params: params)
+        }
     }
     
-    /// Cache of expression types keyed by expression UUID.
     private var types = [UUID: TypeName]()
-    
-    /// Global symbol table keyed by symbol name.
     private var symbols = [String: SymbolInfo]()
     
-    /// Returns the static type of an expression.
-    ///
-    /// - Parameter expr: The expression to query.
+    var tree: TopLevel
+    
+    init(tree: TopLevel = TopLevel(sections: [])) {
+        self.tree = tree
+    }
+    
     func getType(of expr: any ExpressionNode) -> TypeName {
         if let type = types[expr.id] {
             return type
@@ -41,9 +65,6 @@ class ASTContext {
         return askForType(of: expr)
     }
     
-    /// Returns the formal parameter list for a function symbol.
-    ///
-    /// - Parameter id: The function name to look up.
     func getFuncParams(of id: String) -> [FuncDefinition.Parameter] {
         guard let params = symbols[id]?.params else {
             fatalError("No func params available for \(id)")
@@ -60,45 +81,55 @@ class ASTContext {
         return info
     }
     
-    /// Resolves the type of an identifier expression.
-    ///
-    /// - Parameter expr: The identifier expression to resolve.
+    func assignTypeOf(_ type: TypeName, to symbol: String) {
+        let symbolInfo = symbols[symbol]
+        if let symbolInfo {
+            symbols[symbol] = symbolInfo.makeNew(type: type)
+        } else {
+            symbols[symbol] = SymbolInfo(type: type)
+        }
+    }
+    
+    func addParamsTo(func symbol: String, _ params: [FuncDefinition.Parameter]) {
+        let symbolInfo = symbols[symbol]
+        if let symbolInfo {
+            symbols[symbol] = symbolInfo.makeNew(params: params)
+        } else {
+            symbols[symbol] = SymbolInfo(params: params)
+        }
+    }
+    
     func queryTypeOfIdentifierExpression(_ expr: IdentifierExpression) {
         guard let varDefInfo = symbols[expr.name] else {
             fatalError("Symbol table does not contain identifier")
         }
-        
-        types[expr.id] = types[varDefInfo.id]
     }
     
-    /// Resolves the type of a boolean literal expression.
-    ///
-    /// - Parameter expr: The boolean expression to resolve.
     func queryTypeOfBooleanExpression(_ expr: BooleanExpression) {
         types[expr.id] = .Bool
     }
     
-    /// Resolves the type of a numeric literal expression.
-    ///
-    /// - Parameter expr: The number expression to resolve.
     func queryTypeOfNumberExpression(_ expr: NumberExpression) {
         types[expr.id] = .Int
     }
     
-    /// Resolves the result type of a function application.
-    ///
-    /// - Parameter expr: The function application expression.
     func queryTypeOfFuncApplication(_ expr: FuncApplication) {
         guard let funcDefInfo = symbols[expr.name] else {
             fatalError("Symbol table does not contain func")
         }
         
-        types[expr.id] = types[funcDefInfo.id]
+        guard let type = funcDefInfo.type else {
+            fatalError("Symbol table must have type for function declaration")
+        }
+        
+        switch type {
+        case .Arrow(_, to: let to):
+            types[expr.id] = to
+        default:
+            fatalError("Functions must have arrow types")
+        }
     }
     
-    /// Resolves the type of a unary operation.
-    ///
-    /// - Parameter expr: The unary operation to resolve.
     func queryTypeOfUnaryOperation(_ expr: UnaryOperation) {
         switch expr.op {
         case .not, .neg:
@@ -106,9 +137,6 @@ class ASTContext {
         }
     }
     
-    /// Resolves the type of a binary operation.
-    ///
-    /// - Parameter expr: The binary operation to resolve.
     func queryTypeOfBinaryOperation(_ expr: BinaryOperation) {
         switch expr.op {
         case .plus, .minus, .times:
@@ -122,12 +150,25 @@ class ASTContext {
         symbols[id] = info
     }
     
-    /// Requests an expression to compute and cache its type.
-    ///
-    /// - Parameter expr: The expression to query.
-    /// - Returns: The resolved type.
+    func getGlobalSymbols(excluding: String? = nil) -> [String] {
+        var globals: [String] = []
+        tree.sections.forEach { node in
+            node.acceptUpwardTransformer(SymbolGrabber.shared) { _, bindings in
+                if let excluding, bindings.contains(excluding) {
+                    globals.append(contentsOf: bindings.filter({ $0 != excluding }))
+                    return
+                }
+                
+                globals.append(contentsOf: bindings)
+            }
+        }
+        
+        return globals
+    }
+    
     private func askForType(of expr: any ExpressionNode) -> TypeName {
         expr.acceptTypeQuery(self)
-        return types[expr.id]! // safe to force, added to table in line above
+        return types[expr.id]!
     }
 }
+

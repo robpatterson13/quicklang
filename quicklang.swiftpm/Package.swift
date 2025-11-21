@@ -10,7 +10,7 @@ import AppleProductTypes
 let package = Package(
     name: "quicklang",
     platforms: [
-        .iOS("16.0")
+        .iOS("18.1")
     ],
     products: [
         .iOSApplication(
@@ -40,5 +40,5 @@ let package = Package(
             path: "."
         )
     ],
-    swiftLanguageVersions: [.v6]
+    swiftLanguageVersions: [.version("6")]
 )

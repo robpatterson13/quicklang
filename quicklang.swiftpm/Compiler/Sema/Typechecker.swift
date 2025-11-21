@@ -6,13 +6,25 @@
 //
 
 /// Performs static type checking over the AST.
-struct Typechecker: ASTVisitor {
+struct Typechecker: SemaPass, ASTVisitor {
+    
+    func begin(reportingTo: CompilerErrorManager) {
+        let tree = context.tree
+        
+        tree.sections.forEach { node in
+            node.acceptVisitor(self)
+        }
+    }
     
     /// Collected type errors.
-    var errors: [Error] = []
+    private var errors: [Error] = []
     
     /// Context for querying types and symbols.
     let context: ASTContext
+    
+    init(context: ASTContext) {
+        self.context = context
+    }
     
     /// Checks whether an expression has an expected type.
     private func isExpression(_ expr: any ExpressionNode, type: TypeName) -> Bool {

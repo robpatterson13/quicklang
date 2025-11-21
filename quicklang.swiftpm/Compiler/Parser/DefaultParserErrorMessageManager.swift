@@ -47,7 +47,7 @@ class DefaultParserErrorCreator: ParserErrorCreator {
         }
         
         let message = "Expected an identifier in \(specific)"
-        return ParserError(location: .beginningOfFile, message: "")
+        return ParserError(location: info.sourceLocation, message: message)
     }
     
     func expectedFunctionApplication(info: ExpectedFunctionApplicationErrorInfo) -> ParserError {

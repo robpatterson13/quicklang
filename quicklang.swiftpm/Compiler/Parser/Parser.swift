@@ -5,60 +5,105 @@
 //  Created by Rob Patterson on 2/4/25.
 //
 
-class Parser {
+/// A recursive-descent parser that builds the AST from a token stream.
+///
+/// ``Parser`` implements a hand-written, error-recovering recursive-descent parser
+/// for the quicklang grammar. It consumes tokens produced by ``Lexer`` and builds
+/// a ``TopLevel`` AST, inserting sentinel “incomplete” nodes where recovery occurs
+/// so later phases can short-circuit or continue gracefully.
+///
+/// Features:
+/// - Recovery-aware parsing using a pluggable ``RecoveryEngine``
+/// - Production of incomplete sentinels to preserve tree shape under errors
+/// - Precedence-climbing expression parsing
+///
+/// Pipeline role:
+/// - Input: ``Lexer.SuccessfulResult`` (token stream)
+/// - Output: ``TopLevel`` (AST root)
+///
+/// - SeeAlso: ``Lexer``, ``TopLevel``, ``ASTNodeIncompletable``, ``RecoveryEngine``
+final class Parser: CompilerPhase {
     
-    private let errorManager: ParserErrorManager
-    private var tokens: PeekableIterator<Token>
+    typealias InputType = Lexer.SuccessfulResult
+    typealias SuccessfulResult = ASTContext
     
-    private let recoveryEngine: any RecoveryEngine
+    private let errorManager: CompilerErrorManager
+    private var tokens = PeekableIterator<Token>(elements: [])
     
-    /// Creates a parser over a token stream.
+    private var context = ASTContext()
+    
+    /// The active recovery engine used to suggest strategies when errors are encountered.
     ///
-    /// - Parameters:
-    ///   - tokens: The tokens to parse.
-    ///   - manager: The error manager.
-    ///   - recoverer: The recovery engine.
-    init(for tokens: consuming [Token], manager: ParserErrorManager, recoverer: any RecoveryEngine) {
-        self.tokens = PeekableIterator(elements: tokens)
-        self.errorManager = manager
-        self.recoveryEngine = recoverer
+    /// - Note: Defaults to ``DefaultRecovery/shared``.
+    private let recoveryEngine: any RecoveryEngine = DefaultRecovery.shared
+    
+    /// Creates a parser over a token stream with a shared error manager.
+    ///
+    /// The parser records diagnostics via the provided ``CompilerErrorManager`` and
+    /// requests recovery strategies from the configured ``RecoveryEngine``.
+    ///
+    /// - Parameter errorManager: The shared error manager used to record diagnostics.
+    init(errorManager: CompilerErrorManager) {
+        self.errorManager = errorManager
     }
     
-    /// Parses the entire token stream into a top-level AST.
+    /// Parses a full token stream into a ``TopLevel`` AST.
     ///
-    /// - Returns: The parsed top-level node.
-    func begin() -> TopLevel {
-        
+    /// The parser iterates until the token stream is exhausted, repeatedly invoking
+    /// ``parseTopLevel()``. On errors, it records diagnostics, attempts recovery,
+    /// and inserts incomplete sentinels to preserve the AST structure.
+    ///
+    /// - Parameter input: The tokens produced by the lexer.
+    /// - Returns: ``PhaseResult/success(result:)`` with a ``TopLevel`` on success, or
+    ///   ``PhaseResult/failure`` on unrecoverable error.
+    func begin(_ input: Lexer.SuccessfulResult) -> PhaseResult<Parser> {
         var nodes: [any TopLevelNode] = []
+        self.tokens = PeekableIterator(elements: input)
         while !tokens.isEmpty() {
             let node = parseTopLevel()
             nodes.append(node)
         }
         
-        return TopLevel(sections: nodes)
+        context.tree = TopLevel(sections: nodes)
+        if errorManager.hasErrors {
+            return .failure
+        }
+        
+        return .success(result: context)
     }
     
-    /// Records an error and requests a recovery strategy.
+    /// Records a diagnostic and requests a recovery strategy from the recovery engine.
     ///
-    /// - Parameter error: The parser error.
-    /// - Returns: The recovery strategy.
+    /// This utility captures the best-available source location from nearby tokens,
+    /// builds a diagnostic using the error’s info builder, records it, and returns
+    /// a suggested ``RecoveryStrategy``.
+    ///
+    /// - Parameter error: The parser error to report.
+    /// - Returns: A recovery strategy suggested by the configured ``RecoveryEngine``.
     private func error(_ error: ParserErrorType) -> RecoveryStrategy {
         
         let location = tokens.peekNext()?.location
         ?? tokens.peekPrev()?.location
         ?? .beginningOfFile
         
-        errorManager.add(error, at: location)
+        let parserErrorInfo = error.buildInfo(at: location)
+        let parserError = parserErrorInfo.getError(from: DefaultParserErrorCreator.shared)
+        errorManager.addError(parserError)
         return recoveryEngine.recover(from: error)
     }
     
     /// Expects a specific token (or any token) and optionally consumes it.
     ///
+    /// Discussion:
+    /// - If `token` is `nil`, any next token satisfies the expectation.
+    /// - If `burnToken` is `true`, the token is consumed on success.
+    /// - On failure, a diagnostic is recorded and a ``RecoveryStrategy`` is returned.
+    ///
     /// - Parameters:
     ///   - token: The expected token, or `nil` to accept any token.
-    ///   - error: The error to record if the expectation fails.
+    ///   - error: The error to report on mismatch.
     ///   - burnToken: Whether to consume the token on success.
-    /// - Returns: Success with the next token or failure with a recovery strategy.
+    /// - Returns: `.success(nextToken)` on success, or `.failure(strategy)` on error.
     private func expect(
         _ token: Token? = nil,
         else error: ParserErrorType,
@@ -89,27 +134,39 @@ class Parser {
     
     /// Expects a token and consumes it on success.
     ///
+    /// This is a convenience wrapper around ``expect(_:else:burnToken:)`` with `burnToken = true`.
+    ///
     /// - Parameters:
     ///   - token: The expected token, or `nil` to accept any token.
-    ///   - error: The error to record if the expectation fails.
+    ///   - error: The error to report on mismatch.
     /// - Returns: `nil` on success, or a recovery strategy on failure.
     private func expectAndBurn(_ token: Token? = nil, else error: ParserErrorType) -> RecoveryStrategy? {
         switch expect(token, else: error, burnToken: true) {
-        case .success:
-            return nil
-        case .failure(let strategy):
-            return strategy
+            case .success:
+                return nil
+            case .failure(let strategy):
+                return strategy
         }
     }
     
     /// Handles unrecoverable parse states by terminating the parse.
+    ///
+    /// - Note: This is a hard failure and will crash. Use sparingly and only for
+    ///   invariant violations or exhausted recovery options.
     private func handleUnrecoverable() -> Never {
         fatalError()
     }
     
-    /// Applies a recovery strategy to advance to a stable state.
+    /// Applies a recovery strategy to advance the parser to a stable state.
     ///
-    /// - Parameter strategy: The recovery strategy.
+    /// Supported strategies:
+    /// - ``RecoveryStrategy/dropUntil(_:)``: Skip tokens until a member of the recovery set is found
+    /// - ``RecoveryStrategy/add(_:)``: Synthesize a token (not yet implemented)
+    /// - ``RecoveryStrategy/ignore``: Continue without changes
+    /// - ``RecoveryStrategy/unrecoverable``: Abort parsing
+    /// - ``RecoveryStrategy/override(with:)``: Replace with another strategy
+    ///
+    /// - Parameter strategy: The recovery strategy to apply.
     private func recover(using strategy: RecoveryStrategy) {
         
         func dropUntil(_ set: RecoveryStrategy.RecoverySet) {
@@ -142,8 +199,13 @@ class Parser {
     
     /// Parses a top-level construct.
     ///
-    /// - Returns: A top-level node.
-    private func parseTopLevel() -> TopLevelNode {
+    /// Grammar (simplified):
+    /// - function definition
+    /// - value definition (`let`/`var`)
+    /// - top-level function application (terminated by `;`)
+    ///
+    /// - Returns: A ``TopLevelNode`` (or an incomplete sentinel on error).
+    private func parseTopLevel() -> any TopLevelNode {
         
         let currentToken: Token
         let result = expect(else: .expectedTopLevelStatement(got: .eof))
@@ -189,7 +251,12 @@ class Parser {
 
     /// Parses a function definition.
     ///
-    /// - Returns: The parsed function definition, or `.incomplete` on error.
+    /// Grammar (simplified):
+    /// ```text
+    /// func <identifier>(<params>) -> <type> { <block> }
+    /// ```
+    ///
+    /// - Returns: A ``FuncDefinition``, or ``FuncDefinition/incomplete`` on error.
     private func parseFunctionDefinition() -> FuncDefinition {
         
         let recoverFromFuncKeywordMissing = expectAndBurn(
@@ -216,6 +283,8 @@ class Parser {
             return .incomplete
         }
         
+        context.addParamsTo(func: identifier, parameters)
+        
         let recoverFromRParenMissing = expectAndBurn(.RPAREN, else: .expectedRightParen(where: .functionDefinition))
         if let recoverFromRParenMissing {
             recover(using: recoverFromRParenMissing)
@@ -232,6 +301,10 @@ class Parser {
             return .incomplete
         }
         
+        let parameterTypes = parameters.map { $0.type }
+        let funcType: TypeName = .Arrow(from: parameterTypes, to: typeName)
+        context.assignTypeOf(funcType, to: identifier)
+        
         let body = parseBlock(in: .functionBody)
         if body.anyIncomplete {
             return .incomplete
@@ -240,7 +313,9 @@ class Parser {
         return FuncDefinition(name: identifier, type: typeName, parameters: parameters, body: body)
     }
     
-    /// Describes the context in which a block appears.
+    /// Describes the syntactic context in which a block appears.
+    ///
+    /// Used to specialize diagnostics for missing braces.
     private enum BlockContext {
         case ifStatement
         case functionBody
@@ -266,10 +341,13 @@ class Parser {
         }
     }
     
-    /// Parses a block.
+    /// Parses a block delimited by `{` and `}`.
     ///
-    /// - Parameter usage: The context in which the block appears.
-    /// - Returns: The parsed block elements.
+    /// The block body consists of zero or more block-level nodes. On brace errors,
+    /// diagnostics are emitted and incomplete sentinels are inserted to preserve structure.
+    ///
+    /// - Parameter usage: The syntactic context in which the block appears.
+    /// - Returns: The parsed block elements (may include incomplete sentinels).
     private func parseBlock(in usage: BlockContext) -> [any BlockLevelNode] {
         
         var bodyParts: [any BlockLevelNode] = []
@@ -296,9 +374,14 @@ class Parser {
         return bodyParts
     }
     
-    /// Parses an if statement.
+    /// Parses an `if` statement with an optional `else` branch.
     ///
-    /// - Returns: The parsed if statement, or `.incomplete` on error.
+    /// Grammar (simplified):
+    /// ```text
+    /// if (<expr>) { <block> } [else { <block> }]
+    /// ```
+    ///
+    /// - Returns: An ``IfStatement``, or ``IfStatement/incomplete`` on error.
     private func parseIfStatement() -> IfStatement {
         
         let recoverFromIfKeywordMissing = expectAndBurn(
@@ -346,9 +429,14 @@ class Parser {
         return IfStatement(condition: condition, thenBranch: thnBlock, elseBranch: elsBlock)
     }
     
-    /// Parses a return statement.
+    /// Parses a `return` statement terminated by a semicolon.
     ///
-    /// - Returns: The parsed return statement.
+    /// Grammar (simplified):
+    /// ```text
+    /// return <expr> ;
+    /// ```
+    ///
+    /// - Returns: A ``ReturnStatement`` (may be incomplete on error).
     private func parseReturnStatement() -> ReturnStatement {
         
         let recoverFromReturnKeywordMissing = expectAndBurn(
@@ -372,8 +460,14 @@ class Parser {
     
     /// Parses a single block-level element.
     ///
-    /// - Returns: A block-level node, or `nil` to end the block.
-    private func parseBlockBodyPart() -> BlockLevelNode? {
+    /// Recognized constructs:
+    /// - value definitions (`let` / `var`)
+    /// - function application
+    /// - `return` statement
+    /// - `if` statement
+    ///
+    /// - Returns: A ``BlockLevelNode``, or `nil` when the block ends (`}`).
+    private func parseBlockBodyPart() -> (any BlockLevelNode)? {
         
         let currentToken: Token
         let result = expect(else: .expectedBlockBodyPart(got: .eof))
@@ -426,7 +520,14 @@ class Parser {
     
     /// Parses a variable or constant definition.
     ///
-    /// - Returns: A definition node, or `.incomplete` on error.
+    /// Grammar (simplified):
+    /// ```text
+    /// let <identifier> = <expr> ;
+    /// var <identifier> = <expr> ;
+    /// ```
+    ///
+    /// - Returns: A ``DefinitionNode`` (``LetDefinition`` or ``VarDefinition``),
+    ///   or an incomplete sentinel on error.
     private func parseDefinition() -> any DefinitionNode {
         
         let keyword: Token
@@ -464,6 +565,19 @@ class Parser {
             return LetDefinition.incomplete
         }
         
+        let recoverFromColonMissing = expectAndBurn(.COLON, else: .expectedTypeIdentifier(where: .definitionType))
+        if let recoverFromColonMissing {
+            recover(using: recoverFromColonMissing)
+            return LetDefinition.incomplete
+        }
+        
+        let type = parseType(at: .functionParameterType)
+        guard let type else {
+            return LetDefinition.incomplete
+        }
+        
+        context.assignTypeOf(type, to: identifier)
+        
         let recoverFromEqualMissing = expectAndBurn(.EQUAL, else: .expectedEqualInAssignment)
         if let recoverFromEqualMissing {
             recover(using: recoverFromEqualMissing)
@@ -485,9 +599,14 @@ class Parser {
         }
     }
     
-    /// Parses the beginning of an expression.
+    /// Parses the beginning (prefix) of an expression.
     ///
-    /// - Returns: An expression node, or `.incomplete` on error.
+    /// Recognized starts:
+    /// - identifier (may form a function application if followed by `(`)
+    /// - number literal
+    /// - boolean literal
+    ///
+    /// - Returns: An ``ExpressionNode``, or an incomplete sentinel on error.
     private func parseExpressionBeginning() -> any ExpressionNode {
         
         let currentToken: Token
@@ -526,10 +645,12 @@ class Parser {
     
     /// Parses an expression using precedence climbing.
     ///
+    /// Operator precedence and associativity are derived from the token’s binding power.
+    ///
     /// - Parameters:
-    ///   - end: The terminating delimiter.
-    ///   - min: The minimum left binding power.
-    /// - Returns: A parsed expression, or `.incomplete` on error.
+    ///   - end: The terminating delimiter to stop at (e.g., `")"` or `";"`).
+    ///   - min: The minimum left binding power for continuing the parse loop.
+    /// - Returns: A parsed ``ExpressionNode``, or an incomplete sentinel on error.
     private func parseExpression(until end: String, min: Int) -> any ExpressionNode {
         
         var lhsNode = parseExpressionBeginning()
@@ -573,7 +694,7 @@ class Parser {
             case "||":
                 opVal = BinaryOperation.Operator.or
             default:
-                fatalError() // TODO
+                fatalError() // TODO: unreachable with current grammar
             }
             
             lhsNode = BinaryOperation(op: opVal, lhs: lhsNode, rhs: rhsNode)
@@ -586,8 +707,9 @@ class Parser {
     
     /// Parses an identifier and returns its name.
     ///
-    /// - Parameter usage: The context in which the identifier is expected.
-    /// - Returns: The identifier name, or `nil` on error.
+    /// - Parameter usage: The syntactic context in which the identifier is expected,
+    ///   used to tailor diagnostics.
+    /// - Returns: The identifier name, or `nil` on error (after recovery).
     private func parseIdentifier(in usage: IdentifierUsage) -> String? {
         
         let currentToken: Token
@@ -610,9 +732,15 @@ class Parser {
         }
     }
     
-    /// Parses a function's parameter list.
+    /// Parses a function’s parameter list.
     ///
-    /// - Returns: The parsed parameters (may include `.incomplete`).
+    /// Grammar (simplified):
+    /// ```text
+    /// (<identifier> : <type> [, <identifier> : <type>]*)
+    /// ```
+    ///
+    /// - Returns: The parsed parameters. If an error occurs, an incomplete sentinel
+    ///   is appended and the partial list is returned.
     private func parseFunctionParameters() -> [FuncDefinition.Parameter] {
         
         var parameters: [FuncDefinition.Parameter] = []
@@ -658,7 +786,7 @@ class Parser {
     
     /// Parses a single function application argument.
     ///
-    /// - Returns: The parsed argument expression, or `.incomplete` on error.
+    /// - Returns: The parsed argument expression, or an incomplete sentinel on error.
     private func parseFunctionApplicationArgument() -> any ExpressionNode {
         
         let nextToken: Token
@@ -687,7 +815,7 @@ class Parser {
     
     /// Parses a top-level function application and its terminating semicolon.
     ///
-    /// - Returns: The parsed function application.
+    /// - Returns: The parsed ``FuncApplication`` (may be incomplete on error).
     private func parseTopLevelFunctionApplication() -> FuncApplication {
         let functionApplication = parseFunctionApplication()
         
@@ -701,7 +829,12 @@ class Parser {
     
     /// Parses a function application expression.
     ///
-    /// - Returns: The parsed function application, or `.incomplete` on error.
+    /// Grammar (simplified):
+    /// ```text
+    /// <identifier>(<expr-list>)
+    /// ```
+    ///
+    /// - Returns: A ``FuncApplication``, or ``FuncApplication/incomplete`` on error.
     private func parseFunctionApplication() -> FuncApplication {
         
         let identifier = parseIdentifier(in: .functionApplication)
@@ -747,8 +880,13 @@ class Parser {
     
     /// Parses a type identifier.
     ///
-    /// - Parameter location: The context in which the type is expected.
-    /// - Returns: The parsed type, or `nil` on error.
+    /// Supported types:
+    /// - ``TypeName/Int``
+    /// - ``TypeName/Bool``
+    /// - ``TypeName/String``
+    ///
+    /// - Parameter location: The syntactic context used to specialize diagnostics.
+    /// - Returns: The parsed ``TypeName``, or `nil` on error (after recovery).
     private func parseType(at location: TypeLocation) -> TypeName? {
         
         let nextToken: Token

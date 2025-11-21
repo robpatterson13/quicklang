@@ -5,7 +5,10 @@
 //  Created by Rob Patterson on 2/4/25.
 //
 
-class Lexer {
+final class Lexer: CompilerPhase {
+    
+    typealias InputType = SourceCode
+    typealias SuccessfulResult = Array<Token>
     
     typealias SourceCode = String
     typealias LexerLocation = (line: Int, column: Int)
@@ -13,12 +16,27 @@ class Lexer {
     private var tokens: [Token] = []
     private var currentCharIndex: Int = 0
     private var location = LexerLocation(0, 0)
-    private var sourceLength: Int
-    private var sourceCode: SourceCode
+    private var sourceLength: Int = 0
+    private var sourceCode: SourceCode = ""
     
-    init(for sourceCode: SourceCode) {
-        self.sourceCode = sourceCode
-        self.sourceLength = sourceCode.count
+    private let errorManager: CompilerErrorManager
+    
+    init(errorManager: CompilerErrorManager) {
+        self.errorManager = errorManager
+    }
+    
+    func begin(_ input: SourceCode) -> PhaseResult<Lexer> {
+        sourceCode = input
+        sourceLength = sourceCode.count
+        
+        do {
+            return .success(result: try tokenize())
+        } catch let e as LexerErrorWrapper {
+            errorManager.addError(e.error)
+            return .failure
+        } catch {
+            fatalError("Unknown lexer error")
+        }
     }
     
     private func peekNextCharacter() -> Character? {
@@ -56,9 +74,16 @@ class Lexer {
         }
     }
     
-    func tokenize() throws -> Array<Token> {
+    private func tokenize() throws -> SuccessfulResult {
         
         while self.currentCharIndex < self.sourceLength {
+            
+            var locationBuilder = SourceCodeLocationBuilder()
+            locationBuilder.startLine = self.location.line
+            locationBuilder.endLine = self.location.line
+            locationBuilder.startColumn = self.location.column
+            locationBuilder.endColumn = self.location.column + 1
+            
             let currentChar = self.sourceCode[self.sourceCode.index(self.sourceCode.startIndex, offsetBy: self.currentCharIndex)]
             
             if currentChar.isLetter {
@@ -70,7 +95,7 @@ class Lexer {
             } else if currentChar.isWhitespace {
                 self.consumeWhitespace(char: currentChar)
             } else {
-                throw LexerError.unknownCharacter
+                try throwError(.unknownCharacter(char: String(currentChar)), locationBuilder: locationBuilder)
             }
         }
         
@@ -114,18 +139,19 @@ class Lexer {
         var locationBuilder = SourceCodeLocationBuilder()
         locationBuilder.startLine = self.location.line
         locationBuilder.startColumn = self.location.column
+        
         var lexeme = String(self.consumeCharacter())
+        
+        locationBuilder.endLine = self.location.line
+        locationBuilder.endColumn = self.location.column
         
         while let nextChar = self.peekNextCharacter(), nextChar.isNumber {
             guard nextChar != "." else {
-                throw LexerError.floatsNotSupported
+                try throwError(.floatsNotSupported, locationBuilder: locationBuilder)
             }
             
             lexeme += String(self.consumeCharacter())
         }
-        
-        locationBuilder.endLine = self.location.line
-        locationBuilder.endColumn = self.location.column
         return Token.Number(lexeme, location: locationBuilder.build())
     }
     
@@ -134,7 +160,11 @@ class Lexer {
         var locationBuilder = SourceCodeLocationBuilder()
         locationBuilder.startLine = self.location.line
         locationBuilder.startColumn = self.location.column
+        
         var lexeme = String(self.consumeCharacter())
+        
+        locationBuilder.endLine = self.location.line
+        locationBuilder.endColumn = self.location.column
         
         switch lexeme {
         case "-":
@@ -151,21 +181,52 @@ class Lexer {
             lexeme += String(self.consumeCharacter())
         default:
             guard ["*", "(", ")", ":", "{", "}", "!", ",", ";"].contains(lexeme) else {
-                throw LexerError.unknownCharacter
+                try throwError(.unknownCharacter(char: lexeme), locationBuilder: locationBuilder)
             }
         }
-        
-        locationBuilder.endLine = self.location.line
-        locationBuilder.endColumn = self.location.column
         return Token.Symbol(lexeme, location: locationBuilder.build())
+    }
+    
+    private func throwError(
+        _ type: LexerError.ErrorType,
+        locationBuilder: SourceCodeLocationBuilder
+    ) throws -> Never {
+        
+        let location = locationBuilder.build()
+        let error = LexerError(type: type, location: location)
+        throw LexerErrorWrapper(error: error)
     }
 }
 
-extension Lexer {
+struct LexerErrorWrapper: Error {
+    let error: LexerError
+}
+
+struct LexerError: CompilerPhaseError {
+    let location: SourceCodeLocation
+    let message: String
+    private let type: ErrorType
     
-    enum LexerError: Error {
+    enum ErrorType {
         case expectedWhitespace
-        case unknownCharacter
+        case unknownCharacter(char: String)
         case floatsNotSupported
+    }
+    
+    init(type: ErrorType, location: SourceCodeLocation) {
+        self.type = type
+        self.location = location
+        self.message = Self.makeMessage(from: type)
+    }
+    
+    private static func makeMessage(from type: ErrorType) -> String {
+        switch type {
+        case .expectedWhitespace:
+            "Expected whitespace"
+        case .unknownCharacter(let char):
+            "Character \(char) not supported in Quick"
+        case .floatsNotSupported:
+            "Floats are not supported in Quick"
+        }
     }
 }

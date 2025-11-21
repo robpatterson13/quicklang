@@ -594,11 +594,26 @@ struct VarDefinition: DefinitionNode {
 }
 
 /// The set of built-in type names in the language.
-enum TypeName {
+enum TypeName: Equatable {
     case Bool
     case Int
     case String
     case Void
+    indirect case Arrow(from: [TypeName], to: TypeName)
+    
+    static func == (lhs: TypeName, rhs: TypeName) -> Bool {
+        switch (lhs, rhs) {
+        case (.Bool, .Bool),
+            (.Int, .Int),
+            (.String, .String),
+            (.Void, .Void):
+            return true
+        case (.Arrow(let lhsFrom, let lhsTo), .Arrow(let rhsFrom, let rhsTo)):
+            return (lhsFrom == rhsFrom) && (lhsTo == rhsTo)
+        default:
+            return false
+        }
+    }
 }
 
 /// A function definition.

@@ -7,20 +7,63 @@
 
 import Foundation
 
-/// AST-to-AST transformer that rewrites expressions into a linearized form.
+/// Rewrites expressions into a linearized, evaluation-order-friendly AST form.
 ///
-/// This pass preserves original semantics while introducing intermediate
-/// bindings where needed so later phases can assume expressions are evaluated
-/// in a simple, statement-like order.
-class ASTLinearize: ASTUpwardTransformer {
+/// ``ASTLinearize`` is an ``ASTUpwardTransformer`` that preserves semantics while
+/// introducing intermediate bindings where needed so that later phases can assume
+/// a simple, statement-like evaluation order (e.g., left-to-right for binary ops,
+/// arguments before function application).
+///
+/// Strategy:
+/// - Children are transformed first to gather any required temporaries.
+/// - The current node may be reconstructed using transformed children.
+/// - If the node yields a value (e.g., an operation or application), a new temporary
+///   binding (``LetDefinition``) is introduced for that value, and the resulting node
+///   is returned alongside the temporaries that must precede it.
+///
+/// - Important: This pass only reshapes evaluation order. It does not perform
+///   type checking or symbol resolution; see ``Typechecker`` and ``SymbolResolve``.
+///
+/// - SeeAlso: ``ASTUpwardTransformer``, ``DefinitionNode``, ``LetDefinition``
+class ASTLinearize: SemaPass, ASTUpwardTransformer {
     
-    /// Per-visit auxiliary information produced during transformation.
+    /// Entry point for this pass.
     ///
-    /// For linearization, this is the sequence of definition nodes (temporary
-    /// bindings) that must appear before the returned node.
+    /// Implementations should linearize the program and emit diagnostics (if any)
+    /// through the provided ``CompilerErrorManager``. This stub ensures conformance
+    /// to ``SemaPass``.
+    ///
+    /// - Parameter reportingTo: The compiler’s error manager for diagnostics.
+    func begin(reportingTo: CompilerErrorManager) {
+        fatalError("do")
+    }
+    
+    /// Shared semantic context used by the compiler pipeline.
+    ///
+    /// Currently unused by this pass, but available for integration with other phases.
+    let context: ASTContext
+    
+    /// Creates a linearization pass bound to the shared semantic context.
+    ///
+    /// - Parameter context: The shared ``ASTContext``.
+    init(context: ASTContext) {
+        self.context = context
+    }
+    
+    /// Per-visit payload returned upward to parents.
+    ///
+    /// For linearization, each node returns the sequence of ``DefinitionNode`` values
+    /// (temporary bindings) that must appear before the transformed node in the output.
     typealias TransformerInfo = [any DefinitionNode]
     
-    /// Pass-through for identifier references; no linearization needed.
+    // MARK: - Expressions
+    
+    /// No-op for identifier references; identifiers are already linear.
+    ///
+    /// - Parameters:
+    ///   - expression: The ``IdentifierExpression`` to visit.
+    ///   - finished: Upward-only completion callback receiving the (unchanged) expression
+    ///     and an empty list of preceding bindings.
     func visitIdentifierExpression(
         _ expression: IdentifierExpression,
         _ finished: @escaping OnTransformEnd<IdentifierExpression>
@@ -28,7 +71,12 @@ class ASTLinearize: ASTUpwardTransformer {
         finished(expression, [])
     }
     
-    /// Pass-through for boolean literals; no linearization needed.
+    /// No-op for boolean literals; literals are already linear.
+    ///
+    /// - Parameters:
+    ///   - expression: The ``BooleanExpression`` to visit.
+    ///   - finished: Upward-only completion callback with the (unchanged) expression
+    ///     and an empty list of preceding bindings.
     func visitBooleanExpression(
         _ expression: BooleanExpression,
         _ finished: @escaping OnTransformEnd<BooleanExpression>
@@ -36,7 +84,12 @@ class ASTLinearize: ASTUpwardTransformer {
         finished(expression, [])
     }
     
-    /// Pass-through for numeric literals; no linearization needed.
+    /// No-op for numeric literals; literals are already linear.
+    ///
+    /// - Parameters:
+    ///   - expression: The ``NumberExpression`` to visit.
+    ///   - finished: Upward-only completion callback with the (unchanged) expression
+    ///     and an empty list of preceding bindings.
     func visitNumberExpression(
         _ expression: NumberExpression,
         _ finished: @escaping OnTransformEnd<NumberExpression>
@@ -46,8 +99,20 @@ class ASTLinearize: ASTUpwardTransformer {
     
     /// Linearizes the operand and introduces a binding for the unary operation result.
     ///
-    /// Ensures the operand is processed first and any required temporaries precede
-    /// the resulting operation.
+    /// Discussion:
+    /// 1. Linearize the operand first and collect its preceding bindings.
+    /// 2. Rebuild the unary operation with the transformed operand.
+    /// 3. Synthesize a fresh temporary name and emit a ``LetDefinition`` that binds the result.
+    /// 4. Return the rebuilt operation along with the accumulated preceding bindings
+    ///    (including the new result binding).
+    ///
+    /// - Parameters:
+    ///   - operation: The ``UnaryOperation`` to visit.
+    ///   - finished: Upward-only completion callback with the transformed operation and
+    ///     the list of preceding bindings.
+    ///
+    /// - Important: The synthesized name is generated by ``genSym(root:id:)`` and is stable
+    ///   per node identity.
     func visitUnaryOperation(
         _ operation: UnaryOperation,
         _ finished: @escaping OnTransformEnd<UnaryOperation>
@@ -75,8 +140,17 @@ class ASTLinearize: ASTUpwardTransformer {
     
     /// Linearizes both operands and introduces a binding for the binary operation result.
     ///
-    /// Guarantees left-to-right evaluation with any required temporaries emitted before
-    /// the combined operation.
+    /// Discussion:
+    /// 1. Linearize `lhs` then `rhs`, preserving left-to-right evaluation and collecting
+    ///    their preceding bindings in order.
+    /// 2. Rebuild the binary operation with transformed operands.
+    /// 3. Synthesize a fresh temporary name and emit a ``LetDefinition`` for the result.
+    /// 4. Return the rebuilt operation along with the accumulated bindings.
+    ///
+    /// - Parameters:
+    ///   - operation: The ``BinaryOperation`` to visit.
+    ///   - finished: Upward-only completion callback with the transformed operation and
+    ///     the list of preceding bindings.
     func visitBinaryOperation(
         _ operation: BinaryOperation,
         _ finished: @escaping OnTransformEnd<BinaryOperation>
@@ -107,9 +181,16 @@ class ASTLinearize: ASTUpwardTransformer {
         finished(newOperation, newBindings)
     }
     
-    /// Linearizes the bound expression and preserves the definition shape.
+    // MARK: - Definitions
+    
+    /// Linearizes the bound expression and preserves the `let` definition shape.
     ///
     /// Any temporaries introduced by the initializer are emitted before the definition.
+    ///
+    /// - Parameters:
+    ///   - definition: The ``LetDefinition`` to visit.
+    ///   - finished: Upward-only completion callback with the transformed definition and
+    ///     the list of preceding bindings.
     func visitLetDefinition(
         _ definition: LetDefinition,
         _ finished: @escaping OnTransformEnd<LetDefinition>
@@ -130,9 +211,14 @@ class ASTLinearize: ASTUpwardTransformer {
         finished(newDefinition, newBindings)
     }
     
-    /// Linearizes the bound expression and preserves the variable definition.
+    /// Linearizes the bound expression and preserves the `var` definition shape.
     ///
     /// Any temporaries introduced by the initializer are emitted before the definition.
+    ///
+    /// - Parameters:
+    ///   - definition: The ``VarDefinition`` to visit.
+    ///   - finished: Upward-only completion callback with the transformed definition and
+    ///     the list of preceding bindings.
     func visitVarDefinition(
         _ definition: VarDefinition,
         _ finished: @escaping OnTransformEnd<VarDefinition>
@@ -155,8 +241,14 @@ class ASTLinearize: ASTUpwardTransformer {
     
     /// Linearizes a function body while preserving the function signature.
     ///
-    /// The body is rewritten into a sequence of block-level nodes that reflect
-    /// the linearized evaluation order.
+    /// The body is rewritten into a sequence of block-level nodes that reflect a
+    /// linearized evaluation order. The function name, return type, and parameters
+    /// are left unchanged.
+    ///
+    /// - Parameters:
+    ///   - definition: The ``FuncDefinition`` to visit.
+    ///   - finished: Upward-only completion callback with the transformed function and
+    ///     no preceding bindings (functions introduce no temporaries at the declaration boundary).
     func visitFuncDefinition(
         _ definition: FuncDefinition,
         _ finished: @escaping OnTransformEnd<FuncDefinition>
@@ -174,7 +266,15 @@ class ASTLinearize: ASTUpwardTransformer {
     
     /// Linearizes each argument and introduces a binding for the call result.
     ///
-    /// Ensures arguments are evaluated in order before the application.
+    /// Discussion:
+    /// 1. Linearize arguments from left to right, collecting their temporaries in order.
+    /// 2. Rebuild the call with transformed arguments.
+    /// 3. Synthesize a fresh temporary name and emit a ``LetDefinition`` that binds the result.
+    ///
+    /// - Parameters:
+    ///   - expression: The ``FuncApplication`` to visit.
+    ///   - finished: Upward-only completion callback with the transformed application and
+    ///     the list of preceding bindings.
     func visitFuncApplication(
         _ expression: FuncApplication,
         _ finished: @escaping OnTransformEnd<FuncApplication>
@@ -198,7 +298,13 @@ class ASTLinearize: ASTUpwardTransformer {
     
     /// Linearizes the condition and transforms both branches.
     ///
-    /// Temporaries for the condition are emitted prior to the `if` statement.
+    /// Temporaries for the condition are emitted prior to the `if` statement. Branches
+    /// are each linearized independently; branch-local temporaries remain in-branch.
+    ///
+    /// - Parameters:
+    ///   - statement: The ``IfStatement`` to visit.
+    ///   - finished: Upward-only completion callback with the transformed statement and
+    ///     the list of condition temporaries that must precede it.
     func visitIfStatement(
         _ statement: IfStatement,
         _ finished: @escaping OnTransformEnd<IfStatement>
@@ -227,7 +333,12 @@ class ASTLinearize: ASTUpwardTransformer {
     
     /// Linearizes the returned expression and preserves the return statement.
     ///
-    /// Any temporaries introduced by the return value are emitted before the return.
+    /// Any temporaries introduced by the return value are emitted before the `return`.
+    ///
+    /// - Parameters:
+    ///   - statement: The ``ReturnStatement`` to visit.
+    ///   - finished: Upward-only completion callback with the transformed statement and
+    ///     the list of preceding bindings.
     func visitReturnStatement(
         _ statement: ReturnStatement,
         _ finished: @escaping OnTransformEnd<ReturnStatement>
@@ -251,9 +362,15 @@ class ASTLinearize: ASTUpwardTransformer {
         finished(newStatement, newBindings)
     }
     
+    // MARK: - Block and Program Helpers
+    
     /// Rewrites a block into a flattened list of linearized nodes.
     ///
-    /// Each node contributes its own preceding bindings, followed by the node itself.
+    /// Each block-level node contributes its own required temporaries, followed by the
+    /// transformed node itself.
+    ///
+    /// - Parameter block: The sequence of ``BlockLevelNode`` values to linearize.
+    /// - Returns: A new sequence with all required temporaries placed before each transformed node.
     private func linearizeBlock(_ block: [any BlockLevelNode]) -> [any BlockLevelNode] {
         var newBlock = [any BlockLevelNode]()
         
@@ -269,8 +386,11 @@ class ASTLinearize: ASTUpwardTransformer {
     
     /// Entry point to linearize a full program.
     ///
-    /// Produces a new top-level with sections expanded to include any required
-    /// temporaries ahead of transformed nodes.
+    /// Produces a new ``TopLevel`` where each top-level section has been transformed and
+    /// any required temporaries are placed ahead of the transformed node.
+    ///
+    /// - Parameter ast: The original top-level AST.
+    /// - Returns: A new ``TopLevel`` with linearized sections.
     func linearize(_ ast: TopLevel) -> TopLevel {
         let sections = ast.sections
         var transformedSections: [any TopLevelNode] = []
@@ -286,6 +406,11 @@ class ASTLinearize: ASTUpwardTransformer {
     }
     
     /// Generates a stable, unique temporary name for synthesized bindings.
+    ///
+    /// - Parameters:
+    ///   - root: A human-readable root used in the synthesized name (e.g., "binary_op").
+    ///   - id: The node identity used to ensure stability and uniqueness.
+    /// - Returns: A unique symbol name suitable for a temporary ``LetDefinition``.
     private func genSym(root: String, id: UUID) -> String {
         return root + "$" + id.uuidString
     }

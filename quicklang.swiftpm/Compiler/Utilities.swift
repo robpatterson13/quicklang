@@ -71,7 +71,7 @@ extension Array {
     }
 }
 
-extension Array where Element == BlockLevelNode {
+extension Array where Element == any BlockLevelNode {
     
     var anyIncomplete: Bool {
         for node in self {
