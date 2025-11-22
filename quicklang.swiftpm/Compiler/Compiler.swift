@@ -117,6 +117,11 @@ class CompilerToUIBridge {
             print(message)
         }
     }
+    
+    func sendDisplayNodes(from tree: ASTContext) {
+        let display = ConvertToDisplayableNode.shared.begin(tree.tree)
+        viewModel?.receiveDisplayTree(display)
+    }
 }
 
 /// The top-level compiler driver that coordinates the pipeline.
@@ -156,29 +161,6 @@ class Compiler {
     init(bridge: CompilerToUIBridge) {
         errorManager = CompilerErrorManager()
         self.bridge = bridge
-//
-//        let program =
-//        """
-//        func abc(param1: Int) -> Bool {
-//        if (true) { 
-//            return true;
-//        } else { 
-//            return true;
-//        }
-//        }
-//        func i(abcdce: Bool, hello: Int) -> Int {
-//        if (true) {
-//            return true;
-//        } else {
-//            return false + i();
-//        }
-//        }
-//        let value = true;
-//        var value2 = true;
-//        abc(value);
-//        """
-//        
-//        startDriver(program)
     }
 
     /// Starts the end-to-end compilation pipeline for the given source.
@@ -207,13 +189,15 @@ class Compiler {
             return
         }
         
-        switch startSema(passes: Sema.defaultPasses, parseResult) {
-        case .success:
-            break
-        case .failure:
-            onFailure()
-            return
-        }
+        bridge.sendDisplayNodes(from: parseResult)
+        
+//        switch startSema(passes: Sema.defaultPasses, parseResult) {
+//        case .success:
+//            break
+//        case .failure:
+//            onFailure()
+//            return
+//        }
     }
     
     /// Runs the lexing phase, constructing it on first use.
@@ -264,3 +248,27 @@ class Compiler {
     }
 }
 //    let value = 10 + true * 8 + i(16 * blue + another) - hello;
+
+//
+//        let program =
+//        """
+//        func abc(param1: Int) -> Bool {
+//        if (true) {
+//            return true;
+//        } else {
+//            return true;
+//        }
+//        }
+//        func i(abcdce: Bool, hello: Int) -> Int {
+//        if (true) {
+//            return true;
+//        } else {
+//            return false + i();
+//        }
+//        }
+//        let value = true;
+//        var value2 = true;
+//        abc(value);
+//        """
+//
+//        startDriver(program)
