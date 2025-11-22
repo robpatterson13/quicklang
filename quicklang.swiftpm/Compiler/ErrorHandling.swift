@@ -37,6 +37,10 @@ class CompilerErrorManager {
         errors = []
         return dumped
     }
+    
+    func clearErrors() {
+        errors = []
+    }
 }
 
 /// Strategy object that renders a `CompilerPhaseError` to a specific output.

@@ -11,6 +11,8 @@ import Observation
 
 class ProgramEditorCoordinator: NSObject, UITextViewDelegate {
     var parent: ProgramEditorView
+    private var inactivityTimer: Timer?
+    private var cachedText: NSMutableAttributedString?
     
     init(parent: ProgramEditorView) {
         self.parent = parent
@@ -19,11 +21,25 @@ class ProgramEditorCoordinator: NSObject, UITextViewDelegate {
     func textViewDidChange(_ textView: UITextView) {
         let text = NSMutableAttributedString(attributedString: textView.attributedText)
         parent.viewModel.text = text
-        if let last = textView.text.last, last == " " {
-            text.addAttribute(.font, value: UIFont(name: "Menlo-Bold", size: 14), range: text.mutableString.range(of: "func"))
-            textView.attributedText = text
+        
+        inactivityTimer?.invalidate()
+        
+        inactivityTimer = Timer.scheduledTimer(timeInterval: 2.0, target: self, selector: #selector(onTimerEnd), userInfo: nil, repeats: false)
+    }
+    
+    @objc private func onTimerEnd() {
+        if cachedText == nil {
+            autoRerunFrontend()
+        } else if let cachedText, parent.viewModel.text != cachedText {
+            autoRerunFrontend()
         }
     }
+    
+    private func autoRerunFrontend() {
+        parent.viewModel.requestFrontendRerun()
+        self.cachedText = parent.viewModel.text
+    }
+        
 }
 
 struct ProgramEditorView: UIViewRepresentable {
@@ -36,7 +52,7 @@ struct ProgramEditorView: UIViewRepresentable {
         textView.autocorrectionType = .no
         textView.autocapitalizationType = .none
         textView.spellCheckingType = .no
-        textView.font = UIFont(name: "Menlo", size: 14)
+        textView.font = UIFont(name: "Menlo", size: 18)
         return textView
     }
 
@@ -54,6 +70,7 @@ class ProgramEditorViewModel {
     private let bridge: CompilerToUIBridge
     var text = NSMutableAttributedString(string: "")
     var display: [DisplayableNode]? = nil
+    var errors: [String] = []
     private let driver: Compiler
     
     init() {
@@ -74,6 +91,14 @@ class ProgramEditorViewModel {
     
     func receiveDisplayTree(_ tree: [DisplayableNode]) {
         display = tree
+    }
+    
+    func receiveErrorMessages(_ errors: [String]) {
+        self.errors.append(contentsOf: errors)
+    }
+    
+    func requestFrontendRerun() {
+        sendToDriver()
     }
 }
 
@@ -254,24 +279,23 @@ struct ProgramEditor: View {
     
     var body: some View {
         GeometryReader { reader in
-            VStack {
-                toolbar
-                
-                HStack {
+            HStack {
+                VStack {
+                    toolbar
+                    
                     ProgramEditorView(viewModel: $viewModel)
                         .onAppear {
                             viewModel.onLoad()
                         }
                     
-                    VStack {
-                        tree
-                        
-                        Spacer()
-                    }
-                    .frame(maxWidth: reader.size.width / 3, maxHeight: .infinity)
+                    console
+                        .frame(height: reader.size.height / 5)
+                    
                 }
+                tree
+                    .frame(maxWidth: reader.size.width / 3, maxHeight: .infinity)
             }
-            .padding(24)
+            .padding(12)
         }
     }
     
@@ -293,20 +317,68 @@ struct ProgramEditor: View {
     
     @ViewBuilder
     var tree: some View {
-        if let display = viewModel.display {
-            List(display, id: \.id, children: \.children) { line in
-                HStack {
-                    Text(line.name)
-                        .fontWeight(.bold)
-                    
-                    Spacer()
-                    
-                    Text(line.description)
+        VStack(spacing: 0) {
+            HStack(spacing: 0) {
+                Spacer(minLength: 0)
+                
+                if let display = viewModel.display {
+                    List(display, id: \.id, children: \.children) { line in
+                        HStack {
+                            Text(line.name)
+                                .fontWeight(.bold)
+                            
+                            Spacer()
+                            
+                            Text(line.description)
+                        }
+                        .listRowSeparator(.hidden)
+                        .listRowInsets(EdgeInsets(top: 8, leading: 12, bottom: 8, trailing: 12))
+                        .listRowBackground(Color.clear)
+                    }
+                    .listStyle(.plain)
+                    .scrollContentBackground(.hidden)
+                    .background(Color.clear)
+                } else {
+                    Text("No AST to display")
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+                        .padding()
+                }
+                
+                Spacer(minLength: 0)
+            }
+            
+            Spacer(minLength: 0)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(.ultraThickMaterial)
+        .clipShape(RoundedRectangle(cornerRadius: 16))
+        .shadow(radius: 2)
+    }
+    
+    @ViewBuilder
+    var console: some View {
+        VStack {
+            if viewModel.errors.isEmpty {
+                Text("No errors")
+                    .multilineTextAlignment(.leading)
+            } else {
+                VStack(alignment: .leading, spacing: 8) {
+                    ForEach(viewModel.errors, id: \.self) { message in
+                        Text(message)
+                            .multilineTextAlignment(.leading)
+                    }
                 }
             }
-            .listStyle(SidebarListStyle())
-        } else {
-            Text("No AST to display")
+            
+            Spacer()
         }
+        .font(.custom("Menlo", size: 18))
+        .foregroundStyle(viewModel.errors.isEmpty ? .white : .red)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+        .padding(12)
+        .background(.ultraThickMaterial)
+        .clipShape(RoundedRectangle(cornerRadius: 16))
+        .padding(.trailing, 12)
+        .shadow(radius: 2)
     }
 }

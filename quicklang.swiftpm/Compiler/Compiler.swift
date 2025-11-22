@@ -113,14 +113,17 @@ class CompilerToUIBridge {
     ///
     /// - Parameter errorManager: The shared error manager containing diagnostics.
     func reportErrors(from errorManager: CompilerErrorManager) {
-        for message in errorManager.dumpErrors(using: DefaultErrorFormatter()) {
-            print(message)
-        }
+        let messages = errorManager.dumpErrors(using: DefaultErrorFormatter())
+        viewModel?.receiveErrorMessages(messages)
     }
     
     func sendDisplayNodes(from tree: ASTContext) {
         let display = ConvertToDisplayableNode.shared.begin(tree.tree)
         viewModel?.receiveDisplayTree(display)
+    }
+    
+    func clearErrors() {
+        viewModel?.errors = []
     }
 }
 
@@ -170,6 +173,10 @@ class Compiler {
     ///
     /// - Parameter source: The source code to compile.
     fileprivate func startDriver(_ source: Lexer.SourceCode) {
+        errorManager.clearErrors()
+        bridge.clearErrors()
+        resetPhases()
+        
         let lexResult: Lexer.SuccessfulResult
         switch startLexing(source) {
         case .success(result: let result):
@@ -240,10 +247,14 @@ class Compiler {
         return sema!.begin(input)
     }
     
-    private func onFailure() {
+    private func resetPhases() {
         lexer = nil
         parser = nil
         sema = nil
+    }
+    
+    private func onFailure() {
+        resetPhases()
         bridge.reportErrors(from: errorManager)
     }
 }
