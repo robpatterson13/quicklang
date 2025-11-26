@@ -11,7 +11,7 @@ import Observation
 
 @Observable
 class ProgramEditorViewModel {
-    var bridge: MainBridge?
+    weak var bridge: MainBridge?
     var text = NSMutableAttributedString(string: "")
     var display: [DisplayableNode]? = nil
     var errors: [String] = []

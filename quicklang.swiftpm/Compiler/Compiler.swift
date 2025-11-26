@@ -19,8 +19,11 @@ enum PhaseResult<Phase: CompilerPhase> {
     case failure
 }
 
+struct DriverSettings {
+    var onlyLexer: Bool = false
+}
+
 class Compiler {
-    
     weak var bridge: MainBridge?
     
     private var lexer: Lexer?
@@ -33,8 +36,8 @@ class Compiler {
         errorManager = CompilerErrorManager()
     }
 
-    func startDriver(_ source: Lexer.SourceCode, onlyLexer: Bool = false) {
-        if !onlyLexer {  // change to have some reasoning about settings that shouldn't clear errors
+    func startDriver(_ source: Lexer.SourceCode, settings: DriverSettings = .init()) {
+        if !settings.onlyLexer {  // change to have some reasoning about settings that shouldn't clear errors
             // ex. lexing for highlighting or parsing for connecting braces of functions for highlighting
             errorManager.clearErrors()
             bridge?.clearErrors()
@@ -50,7 +53,7 @@ class Compiler {
             return
         }
         
-        guard !onlyLexer else {
+        guard !settings.onlyLexer else {
             return
         }
         

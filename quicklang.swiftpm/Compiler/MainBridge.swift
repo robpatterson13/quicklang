@@ -26,7 +26,8 @@ class MainBridge {
     }
     
     func requestSyntaxHighlighting(of source: String) {
-        driver.startDriver(source, onlyLexer: true)
+        let settings = DriverSettings(onlyLexer: true)
+        driver.startDriver(source, settings: settings)
     }
     
     func sendDisplayNodes(from tree: ASTContext) {
