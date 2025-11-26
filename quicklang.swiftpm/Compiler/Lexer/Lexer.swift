@@ -5,6 +5,52 @@
 //  Created by Rob Patterson on 2/4/25.
 //
 
+import Foundation
+
+final class LexerSyntaxInfoManager {
+    
+    enum SyntaxType {
+        case keyword
+        case booleanLiteral
+        case numLiteral
+        case identifier
+        case symbol
+        
+        static func getSyntaxType(from token: Token) -> SyntaxType {
+            switch token {
+            case .Identifier:
+                return .identifier
+            case .Keyword:
+                return .keyword
+            case .Number:
+                return .numLiteral
+            case .Boolean:
+                return .booleanLiteral
+            case .Symbol:
+                return .symbol
+            }
+        }
+    }
+    
+    typealias SyntaxInfo = (Token, NSRange)
+    typealias SyntaxMapping = [SyntaxType : [SyntaxInfo]]
+    
+    var mapping: SyntaxMapping = .init()
+    
+    func addMapping(for token: Token, at loc: Int) {
+        let info = buildSyntaxInfo(from: token, at: loc)
+        let syntaxType = SyntaxType.getSyntaxType(from: token)
+        
+        mapping[syntaxType, default: []].append(info)
+    }
+    
+    private func buildSyntaxInfo(from token: Token, at loc: Int) -> SyntaxInfo {
+        let len = token.value.count
+        let range = NSRange(location: loc - len, length: len)
+        return (token, range)
+    }
+}
+
 final class Lexer: CompilerPhase {
     
     typealias InputType = SourceCode
@@ -20,6 +66,8 @@ final class Lexer: CompilerPhase {
     private var sourceCode: SourceCode = ""
     
     private let errorManager: CompilerErrorManager
+    
+    private let syntaxManager = LexerSyntaxInfoManager()
     
     init(errorManager: CompilerErrorManager) {
         self.errorManager = errorManager
@@ -116,9 +164,11 @@ final class Lexer: CompilerPhase {
         locationBuilder.endLine = self.location.line
         locationBuilder.endColumn = self.location.column
             
+        let token: Token
         switch lexeme {
         case "true", "false":
-            return .Boolean(lexeme, location: locationBuilder.build())
+            token = .Boolean(lexeme, location: locationBuilder.build())
+            syntaxManager.addMapping(for: token, at: currentCharIndex)
         case "for", "while":
             fallthrough
         case "func", "return":
@@ -128,10 +178,13 @@ final class Lexer: CompilerPhase {
         case "let", "var":
             fallthrough
         case "if", "else":
-            return .Keyword(lexeme, location: locationBuilder.build())
+            token = .Keyword(lexeme, location: locationBuilder.build())
+            syntaxManager.addMapping(for: token, at: currentCharIndex)
         default:
-            return .Identifier(lexeme, location: locationBuilder.build())
+            token = .Identifier(lexeme, location: locationBuilder.build())
         }
+        
+        return token
     }
     
     private func tokenizeNumber() throws -> Token {
@@ -152,7 +205,10 @@ final class Lexer: CompilerPhase {
             
             lexeme += String(self.consumeCharacter())
         }
-        return Token.Number(lexeme, location: locationBuilder.build())
+        
+        let token = Token.Number(lexeme, location: locationBuilder.build())
+        syntaxManager.addMapping(for: token, at: currentCharIndex)
+        return token
     }
     
     private func tokenizePunctuation() throws -> Token {
@@ -195,6 +251,10 @@ final class Lexer: CompilerPhase {
         let location = locationBuilder.build()
         let error = LexerError(type: type, location: location)
         throw LexerErrorWrapper(error: error)
+    }
+    
+    func getSyntaxMapping() -> LexerSyntaxInfoManager.SyntaxMapping {
+        return syntaxManager.mapping
     }
 }
 

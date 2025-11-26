@@ -5,6 +5,9 @@
 //  Created by Rob Patterson on 2/6/25.
 //
 
+import Foundation
+import UIKit
+
 public struct PeekableIterator<Element>: IteratorProtocol {
     private var elements: [Element]
     private var index: Int
@@ -107,5 +110,21 @@ extension Array where Element == any ExpressionNode {
         }
         
         return false
+    }
+}
+
+extension NSAttributedString {
+    var wholeStringRange: NSRange {
+        NSRange(location: 0, length: self.length)
+    }
+}
+
+extension UITextView {
+    var cursorPosition: Int? {
+        if let selectedRange = self.selectedTextRange {
+            return offset(from: self.beginningOfDocument, to: selectedRange.start)
+        }
+        
+        return nil
     }
 }

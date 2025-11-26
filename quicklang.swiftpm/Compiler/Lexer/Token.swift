@@ -116,6 +116,9 @@ extension Token {
     
     static let FUNC: Token = .buildKeyword("func")
     
+    static let LET: Token = .buildKeyword("func")
+    static let VAR: Token = .buildKeyword("var")
+    
     private static func buildKeyword(_ keyword: String) -> Token {
         return .Keyword(keyword, location: .dummySourceCodeLocation)
     }

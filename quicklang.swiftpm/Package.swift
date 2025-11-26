@@ -10,7 +10,8 @@ import AppleProductTypes
 let package = Package(
     name: "quicklang",
     platforms: [
-        .iOS("18.1")
+        .iOS("26.0"),
+        .macOS("26.0")
     ],
     products: [
         .iOSApplication(
@@ -23,8 +24,7 @@ let package = Package(
             appIcon: .placeholder(icon: .magicWand),
             accentColor: .presetColor(.indigo),
             supportedDeviceFamilies: [
-                .pad,
-                .phone
+                .pad
             ],
             supportedInterfaceOrientations: [
                 .portrait,
