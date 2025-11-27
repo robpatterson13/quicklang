@@ -513,9 +513,9 @@ struct LetDefinition: DefinitionNode  {
     /// - Parameters:
     ///   - name: The declared identifier.
     ///   - expression: The initializer expression.
-    init(name: String, expression: any ExpressionNode) {
+    init(name: String, type: TypeName, expression: any ExpressionNode) {
         self.name = name
-        self.type = nil
+        self.type = type
         self.expression = expression
         self.isIncomplete = false
     }
@@ -567,9 +567,9 @@ struct VarDefinition: DefinitionNode {
     /// - Parameters:
     ///   - name: The declared identifier.
     ///   - expression: The initializer expression.
-    init(name: String, expression: any ExpressionNode) {
+    init(name: String, type: TypeName, expression: any ExpressionNode) {
         self.name = name
-        self.type = nil
+        self.type = type
         self.expression = expression
         self.isIncomplete = false
     }

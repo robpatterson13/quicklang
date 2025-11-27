@@ -33,7 +33,7 @@ struct ParserErrorToken {
 /// ```
 ///
 /// - SeeAlso: ``ParserErrorInfo``, ``ParserErrorCreator``, ``RecoveryStrategy``
-enum ParserErrorType {
+enum ParserErrorType: CompilerPhaseErrorType {
     // MARK: Expected identifier messages
     /// A type identifier was expected at a specific syntactic site.
     case expectedTypeIdentifier(where: ExpectedTypeIdentifierErrorInfo.ErrorType)
@@ -136,7 +136,7 @@ enum ParserErrorType {
 /// to produce a formatted ``ParserError`` using a ``ParserErrorCreator``.
 ///
 /// - SeeAlso: ``ParserError``, ``ParserErrorCreator``
-protocol ParserErrorInfo {
+protocol ParserErrorInfo: CompilerPhaseErrorInfo {
     /// Builds a ``ParserError`` using the provided message creator.
     ///
     /// - Parameter manager: The message creator that formats this info payload.

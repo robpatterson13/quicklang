@@ -571,7 +571,7 @@ final class Parser: CompilerPhase {
             return LetDefinition.incomplete
         }
         
-        let type = parseType(at: .functionParameterType)
+        let type = parseType(at: .definitionType)
         guard let type else {
             return LetDefinition.incomplete
         }
@@ -593,9 +593,9 @@ final class Parser: CompilerPhase {
         
         switch definitionType {
         case .var:
-            return VarDefinition(name: identifier, expression: boundExpression)
+            return VarDefinition(name: identifier, type: type, expression: boundExpression)
         case .let:
-            return LetDefinition(name: identifier, expression: boundExpression)
+            return LetDefinition(name: identifier, type: type, expression: boundExpression)
         }
     }
     

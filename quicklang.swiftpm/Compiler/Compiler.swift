@@ -68,13 +68,15 @@ class Compiler {
         
         bridge?.sendDisplayNodes(from: parseResult)
         
-//        switch startSema(passes: Sema.defaultPasses, parseResult) {
-//        case .success:
-//            break
-//        case .failure:
-//            onFailure()
-//            return
-//        }
+        switch startSema(passes: Sema.defaultPasses, parseResult) {
+        case .success(result: let result):
+            if let result {
+                print(result)
+            }
+        case .failure:
+            onFailure()
+            return
+        }
     }
     
     private func startLexing(_ source: Lexer.SourceCode) -> PhaseResult<Lexer> {

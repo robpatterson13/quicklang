@@ -23,6 +23,7 @@
 ///
 /// - SeeAlso: ``Sema``, ``ASTContext``, ``CompilerErrorManager``
 protocol SemaPass {
+    associatedtype Result
     /// The shared semantic/type context available to all passes.
     ///
     /// Passes may use the context to query types, look up symbol metadata,
@@ -37,7 +38,7 @@ protocol SemaPass {
     /// subsequent passes depend on.
     ///
     /// - Parameter reportingTo: The compiler’s error manager used to record diagnostics.
-    func begin(reportingTo: CompilerErrorManager)
+    func begin(reportingTo: CompilerErrorManager) -> Result
 }
 
 /// Orchestrates the sequence of semantic analysis passes over the AST.
@@ -67,7 +68,7 @@ final class Sema: CompilerPhase {
     ///
     /// - Note: This pipeline currently does not return a transformed AST from
     ///   ``begin(_:)``; instead, passes communicate via the shared ``ASTContext``.
-    typealias SuccessfulResult = ()
+    typealias SuccessfulResult = ASTContext?
     
     /// Supported semantic passes in their canonical execution order.
     ///
@@ -151,10 +152,20 @@ final class Sema: CompilerPhase {
         self.passes = input.passes
         let context = input.context
         
+        var passResult: Any? = nil
         passes.forEach { passType in
-            let pass = passType.makePassManager(using: context)
+            let pass: any SemaPass
+            if let newContext = passResult as? ASTContext {
+                pass = passType.makePassManager(using: newContext)
+                passResult = nil
+            } else {
+                pass = passType.makePassManager(using: context)
+            }
             
-            pass.begin(reportingTo: errorManager)
+            let result = pass.begin(reportingTo: errorManager)
+            if let result = result as? ASTContext {
+                passResult = result
+            }
             
             if errorManager.hasErrors {
                 return
@@ -165,6 +176,13 @@ final class Sema: CompilerPhase {
             return .failure
         }
         
-        return .success(result: ())
+        let finalResult = passResult as? ASTContext
+        return .success(result: finalResult)
     }
+}
+
+struct SemaError: CompilerPhaseError {
+    var location: SourceCodeLocation
+    var message: String
+    
 }

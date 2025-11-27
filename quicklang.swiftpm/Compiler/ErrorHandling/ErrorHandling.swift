@@ -80,3 +80,14 @@ extension CompilerPhaseError {
         return formatter.format(self)
     }
 }
+
+protocol CompilerPhaseErrorType {
+    associatedtype PhaseErrorInfo
+    func buildInfo(at location: SourceCodeLocation) -> PhaseErrorInfo
+}
+    
+protocol CompilerPhaseErrorInfo {
+    associatedtype PhaseErrorCreator
+    associatedtype PhaseError
+    func getError(from manager: PhaseErrorCreator) -> PhaseError
+}

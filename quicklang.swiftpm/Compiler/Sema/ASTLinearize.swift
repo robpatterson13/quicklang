@@ -35,7 +35,7 @@ class ASTLinearize: SemaPass, ASTUpwardTransformer {
     ///
     /// - Parameter reportingTo: The compiler’s error manager for diagnostics.
     func begin(reportingTo: CompilerErrorManager) {
-        fatalError("do")
+        context.tree = linearize(context.tree)
     }
     
     /// Shared semantic context used by the compiler pipeline.
@@ -132,7 +132,8 @@ class ASTLinearize: SemaPass, ASTUpwardTransformer {
         
         let newName = genSym(root: "unary_op", id: operation.id)
         let newOperation = UnaryOperation(op: operation.op, expression: operand)
-        let newBinding = LetDefinition(name: newName, expression: newOperation)
+        let newType = context.getType(of: newOperation)
+        let newBinding = LetDefinition(name: newName, type: newType, expression: newOperation)
         newBindings.append(newBinding)
         
         finished(newOperation, newBindings)
@@ -175,7 +176,8 @@ class ASTLinearize: SemaPass, ASTUpwardTransformer {
         
         let newName = genSym(root: "binary_op", id: operation.id)
         let newOperation = BinaryOperation(op: operation.op, lhs: lhs, rhs: rhs)
-        let newBinding = LetDefinition(name: newName, expression: newOperation)
+        let newType = context.getType(of: newOperation)
+        let newBinding = LetDefinition(name: newName, type: newType, expression: newOperation)
         newBindings.append(newBinding)
         
         finished(newOperation, newBindings)
@@ -207,7 +209,8 @@ class ASTLinearize: SemaPass, ASTUpwardTransformer {
             return
         }
         
-        let newDefinition = LetDefinition(name: definition.name, expression: bound)
+        let newType = context.getType(of: bound)
+        let newDefinition = LetDefinition(name: definition.name, type: newType, expression: bound)
         finished(newDefinition, newBindings)
     }
     
@@ -235,7 +238,8 @@ class ASTLinearize: SemaPass, ASTUpwardTransformer {
             return
         }
         
-        let newDefinition = VarDefinition(name: definition.name, expression: bound)
+        let newType = context.getType(of: bound)
+        let newDefinition = VarDefinition(name: definition.name, type: newType, expression: bound)
         finished(newDefinition, newBindings)
     }
     
@@ -290,7 +294,8 @@ class ASTLinearize: SemaPass, ASTUpwardTransformer {
         
         let newName = genSym(root: "func_app", id: expression.id)
         let newExpr = FuncApplication(name: expression.name, arguments: args)
-        let newBinding = LetDefinition(name: newName, expression: newExpr)
+        let newType = context.getType(of: newExpr)
+        let newBinding = LetDefinition(name: newName, type: newType, expression: newExpr)
         bindings.append(newBinding)
         
         finished(newExpr, bindings)
