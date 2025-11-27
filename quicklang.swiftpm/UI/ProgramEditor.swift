@@ -101,11 +101,12 @@ struct ProgramEditor: View {
                     List(display, id: \.id, children: \.children) { line in
                         HStack {
                             Text(line.name)
-                                .fontWeight(.bold)
+                                .font(.custom("Menlo-Bold", size: 18))
                             
                             Spacer()
                             
                             Text(line.description)
+                                .font(.custom("Menlo", size: 18))
                         }
                         .listRowSeparator(.hidden)
                         .listRowInsets(EdgeInsets(top: 8, leading: 12, bottom: 8, trailing: 12))
@@ -116,6 +117,7 @@ struct ProgramEditor: View {
                     .background(Color.clear)
                 } else {
                     Text("No AST to display")
+                        .font(.custom("Menlo", size: 18))
                         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
                         .padding()
                 }

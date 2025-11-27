@@ -15,8 +15,6 @@ class ProgramEditorCoordinator: NSObject, UITextViewDelegate {
     private var renderingTimer: Timer?
     private var cachedText: NSMutableAttributedString?
     
-    private var viewAfterLastChange: UITextView?
-    
     init(parent: ProgramEditorView) {
         self.parent = parent
         self.renderer = ProgramEditorRenderer(theme: parent.viewModel.theme)
@@ -25,7 +23,6 @@ class ProgramEditorCoordinator: NSObject, UITextViewDelegate {
     func textViewDidChange(_ textView: UITextView) {
         let text = NSMutableAttributedString(attributedString: textView.attributedText)
         parent.viewModel.text = text
-        viewAfterLastChange = textView
         
         inactivityTimer?.invalidate()
         

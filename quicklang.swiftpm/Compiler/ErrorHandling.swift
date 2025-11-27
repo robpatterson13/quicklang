@@ -34,7 +34,7 @@ class CompilerErrorManager {
         using formatter: F
     ) -> [F.CompilerErrorFormatterOutput] {
         let dumped = errors.map { $0.getDescription(from: formatter) }
-        errors = []
+        clearErrors()
         return dumped
     }
     

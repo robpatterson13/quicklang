@@ -127,4 +127,22 @@ extension UITextView {
         
         return nil
     }
+    
+    func characterBeforeCursor(count num: Int) -> String? {
+        if let cursorRange = self.selectedTextRange,
+           let newPosition = self.position(from: cursorRange.start, offset: -num) {
+            
+            let range = self.textRange(from: newPosition, to: cursorRange.start)
+            let new = self.text(in: range!)
+            
+            if let new,
+               new.count > 1,
+                let first = new.first {
+                return String(first)
+            }
+        }
+        
+        return nil
+    }
+
 }

@@ -15,6 +15,7 @@ final class LexerSyntaxInfoManager {
         case numLiteral
         case identifier
         case symbol
+        case funcIdentifier
         
         static func getSyntaxType(from token: Token) -> SyntaxType {
             switch token {
@@ -37,11 +38,30 @@ final class LexerSyntaxInfoManager {
     
     var mapping: SyntaxMapping = .init()
     
-    func addMapping(for token: Token, at loc: Int) {
+    func addMapping(for token: Token, at loc: Int, withType: SyntaxType? = nil) {
         let info = buildSyntaxInfo(from: token, at: loc)
-        let syntaxType = SyntaxType.getSyntaxType(from: token)
+        let syntaxType: SyntaxType
+        if let withType {
+            syntaxType = withType
+        } else {
+            syntaxType = SyntaxType.getSyntaxType(from: token)
+        }
         
         mapping[syntaxType, default: []].append(info)
+    }
+    
+    func highlightingForIdentifier(_ token: Token, last: Token?, at index: Int) {
+        var syntaxType: SyntaxType? = nil
+        if let last {
+            switch last {
+            case .Keyword(let string, _) where string == "func":
+                syntaxType = .funcIdentifier
+            default:
+                break
+            }
+        }
+        
+        addMapping(for: token, at: index, withType: syntaxType)
     }
     
     private func buildSyntaxInfo(from token: Token, at loc: Int) -> SyntaxInfo {
@@ -182,6 +202,7 @@ final class Lexer: CompilerPhase {
             syntaxManager.addMapping(for: token, at: currentCharIndex)
         default:
             token = .Identifier(lexeme, location: locationBuilder.build())
+            syntaxManager.highlightingForIdentifier(token, last: tokens.last, at: currentCharIndex)
         }
         
         return token

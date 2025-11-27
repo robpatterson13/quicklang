@@ -48,7 +48,18 @@ class ProgramEditorRenderer {
                 return
             case .symbol:
                 return
+            case .funcIdentifier:
+                doSyntaxHighlightingForFuncIdentifiers(tokens, on: &text)
             }
+        }
+    }
+    
+    private func doSyntaxHighlightingForFuncIdentifiers(
+        _ tokens: [LexerSyntaxInfoManager.SyntaxInfo],
+        on text: inout NSMutableAttributedString
+    ) {
+        tokens.forEach { (_, range) in
+            text.addAttributes(theme.funcIdentifier, range: range)
         }
     }
     

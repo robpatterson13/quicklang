@@ -37,8 +37,7 @@ class Compiler {
     }
 
     func startDriver(_ source: Lexer.SourceCode, settings: DriverSettings = .init()) {
-        if !settings.onlyLexer {  // change to have some reasoning about settings that shouldn't clear errors
-            // ex. lexing for highlighting or parsing for connecting braces of functions for highlighting
+        if !settings.onlyLexer {
             errorManager.clearErrors()
             bridge?.clearErrors()
         }

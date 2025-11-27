@@ -26,6 +26,9 @@ struct Theme {
             booleanLiteral: [
                 .foregroundColor: UIColor(red: 212 / 255, green: 102 / 255, blue: 149 / 255, alpha: 1),
                 .font: UIFont(name: "Menlo-Bold", size: 18) as Any
+            ],
+            funcIdentifier: [
+                .foregroundColor: UIColor(red: 120 / 255, green: 194 / 255, blue: 180 / 255, alpha: 1)
             ]
         )
     }
@@ -34,12 +37,14 @@ struct Theme {
         plainText: [NSAttributedString.Key : Any],
         keyword: [NSAttributedString.Key : Any],
         numLiteral: [NSAttributedString.Key : Any],
-        booleanLiteral: [NSAttributedString.Key : Any]
+        booleanLiteral: [NSAttributedString.Key : Any],
+        funcIdentifier: [NSAttributedString.Key : Any]
     ) {
         self.plainText = plainText
         self.keyword = keyword
         self.numLiteral = numLiteral
         self.booleanLiteral = booleanLiteral
+        self.funcIdentifier = funcIdentifier
     }
     
     let font = UIFont(name: "Menlo", size: 18)
@@ -47,4 +52,5 @@ struct Theme {
     let keyword: [NSAttributedString.Key: Any]
     let numLiteral: [NSAttributedString.Key: Any]
     let booleanLiteral: [NSAttributedString.Key: Any]
+    let funcIdentifier: [NSAttributedString.Key: Any]
 }
