@@ -95,4 +95,6 @@ protocol ASTDownwardTransformer {
     /// Implementations typically propagate `info` to the returned expression to perform
     /// any context-sensitive checks or transformations.
     func visitReturnStatement(_ statement: ReturnStatement, _ info: TransformationInfo)
+    
+    func visitAssignmentStatement(_ statement: AssignmentStatement, _ info: TransformationInfo)
 }

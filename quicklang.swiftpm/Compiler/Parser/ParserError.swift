@@ -159,6 +159,7 @@ struct ExpectedIdentifierErrorInfo: ParserErrorInfo {
         case valueDefinition
         case functionParameter
         case functionApplication
+        case assignmentStatement
     }
     
     func getError(from manager: any ParserErrorCreator) -> ParserError {
@@ -202,6 +203,7 @@ struct ExpectedTopLevelStatementErrorInfo: ParserErrorInfo {
         case number
         case keyword(String)
         case symbol(String)
+        case identifier(String)
     }
     
     func getError(from manager: any ParserErrorCreator) -> ParserError {
@@ -393,6 +395,7 @@ struct ExpectedBlockBodyPartErrorInfo: ParserErrorInfo {
         case number
         case keyword(String)
         case symbol(String)
+        case identifier(String)
         case eof
     }
     

@@ -44,6 +44,8 @@ class DefaultParserErrorCreator: ParserErrorCreator {
             specific = "function parameter"
         case .functionApplication:
             specific = "function application"
+        case .assignmentStatement:
+            specific = "assignment statement"
         }
         
         let message = "Expected an identifier in \(specific)"
@@ -186,6 +188,8 @@ class DefaultParserErrorCreator: ParserErrorCreator {
             specific = "got keyword `\(string)`"
         case .symbol(let string):
             specific = "got symbol `\(string)`"
+        case .identifier(let string):
+            specific = "got identifier `\(string)`"
         }
         
         let message = "Expected a top level construct, but \(specific)"
@@ -205,6 +209,8 @@ class DefaultParserErrorCreator: ParserErrorCreator {
             specific = "got symbol `\(string)`"
         case .eof:
             specific = "reached end of the file"
+        case .identifier(let string):
+            specific = "got identifier `\(string)`"
         }
         
         let message = "Expected some block-level construct, but \(specific)"

@@ -218,7 +218,7 @@ protocol DefinitionNode: TopLevelNode {
 protocol StatementNode: BlockLevelNode { }
 
 /// An identifier expression (variable or function name reference).
-struct IdentifierExpression: ExpressionNode {
+struct IdentifierExpression: ExpressionNode, TopLevelNode {
     let id = UUID()
     /// The referenced name.
     let name: String
@@ -857,5 +857,42 @@ struct ReturnStatement: StatementNode, BlockLevelNode {
     ) {
         transformer.visitReturnStatement(self, info)
     }
+}
+
+struct AssignmentStatement: StatementNode, TopLevelNode {
+    let id = UUID()
+    let name: String
+    let expression: any ExpressionNode
+    
+    var isIncomplete: Bool
+    static var incomplete: AssignmentStatement {
+        return AssignmentStatement()
+    }
+    
+    init(name: String, expression: any ExpressionNode) {
+        self.name = name
+        self.expression = expression
+        self.isIncomplete = false
+    }
+    
+    private init() {
+        self.name = ""
+        self.expression = IdentifierExpression.incomplete
+        self.isIncomplete = true
+    }
+    
+    func acceptVisitor(_ visitor: any ASTVisitor) {
+        visitor.visitAssignmentStatement(self)
+    }
+    
+    func acceptUpwardTransformer<T>(_ transformer: T, _ finished: @escaping T.OnTransformEnd<AssignmentStatement>) where T : ASTUpwardTransformer {
+        transformer.visitAssignmentStatement(self, finished)
+    }
+    
+    func acceptDownwardTransformer<T>(_ transformer: T, _ info: T.TransformationInfo) where T : ASTDownwardTransformer {
+        transformer.visitAssignmentStatement(self, info)
+    }
+    
+    
 }
 

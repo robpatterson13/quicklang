@@ -71,7 +71,7 @@ class Compiler {
         switch startSema(passes: Sema.defaultPasses, parseResult) {
         case .success(result: let result):
             if let result {
-                print(result)
+                print(result.tree)
             }
         case .failure:
             onFailure()

@@ -105,4 +105,6 @@ protocol ASTUpwardTransformer {
     /// `return` statement.
     func visitReturnStatement(_ statement: ReturnStatement, _ finished: @escaping OnTransformEnd<ReturnStatement>)
     
+    func visitAssignmentStatement(_ statement: AssignmentStatement, _ finished: @escaping OnTransformEnd<AssignmentStatement>)
+    
 }

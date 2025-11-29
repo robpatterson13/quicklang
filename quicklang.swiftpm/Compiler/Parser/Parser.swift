@@ -225,7 +225,7 @@ final class Parser: CompilerPhase {
             return parseDefinition()
             
         case .Identifier:
-            return parseTopLevelFunctionApplication()
+            return parseTopLevelIdentifier()
             
         case .Boolean:
             let strategy = self.error(.expectedTopLevelStatement(got: .boolean))
@@ -247,6 +247,140 @@ final class Parser: CompilerPhase {
             recover(using: strategy)
             return TopLevelNodeIncomplete.incomplete
         }
+    }
+    
+    private enum ParseIdentifierErrorType {
+        case eof
+        case boolean
+        case number
+        case keyword(String)
+        case symbol(String)
+        case identifier(String)
+        
+        var topLevel: ExpectedTopLevelStatementErrorInfo.ErrorType {
+            switch self {
+            case .eof:
+                return .eof
+            case .boolean:
+                return .boolean
+            case .number:
+                return .number
+            case .keyword(let string):
+                return .keyword(string)
+            case .symbol(let string):
+                return .symbol(string)
+            case .identifier(let string):
+                return .identifier(string)
+            }
+        }
+        
+        var blockLevel: ExpectedBlockBodyPartErrorInfo.ErrorType {
+            switch self {
+            case .eof:
+                return .eof
+            case .boolean:
+                return .boolean
+            case .number:
+                return .number
+            case .keyword(let string):
+                return .keyword(string)
+            case .symbol(let string):
+                return .symbol(string)
+            case .identifier(let string):
+                return .identifier(string)
+            }
+        }
+    }
+    
+    private func errorFromParseIdentifierStart(
+        got type: ParseIdentifierErrorType,
+        at site: IdentifierSite
+    ) -> any BlockLevelNode {
+        
+        let error: ParserErrorType
+        switch site {
+        case .topLevel:
+            error = .expectedTopLevelStatement(got: type.topLevel)
+        case .block:
+            error = .expectedBlockBodyPart(got: type.blockLevel)
+        }
+        let strategy = self.error(error)
+        recover(using: strategy)
+        
+        switch site {
+        case .topLevel:
+            return TopLevelNodeIncomplete.incomplete
+        case .block:
+            return BlockLevelNodeIncomplete.incomplete
+        }
+    }
+    
+    private enum IdentifierSite {
+        case topLevel
+        case block
+    }
+    
+    private func parseIdentifierStart(in site: IdentifierSite) -> any BlockLevelNode {
+        guard let twoAhead = tokens.peek(ahead: 2) else {
+            return errorFromParseIdentifierStart(got: .eof, at: site)
+        }
+        
+        switch twoAhead {
+        case .RPAREN:
+            switch site {
+            case .topLevel:
+                return parseTopLevelFunctionApplication()
+            case .block:
+                return parseFunctionApplication()
+            }
+            
+        case .EQUAL:
+            return parseAssignmentStatement()
+            
+        case .Identifier(let string, _):
+            return errorFromParseIdentifierStart(got: .identifier(string), at: site)
+            
+        case .Keyword(let string, _):
+            return errorFromParseIdentifierStart(got: .keyword(string), at: site)
+            
+        case .Number:
+            return errorFromParseIdentifierStart(got: .number, at: site)
+            
+        case .Boolean:
+            return errorFromParseIdentifierStart(got: .boolean, at: site)
+            
+        case .Symbol(let string, _):
+            return errorFromParseIdentifierStart(got: .symbol(string), at: site)
+        }
+    }
+    
+    private func parseTopLevelIdentifier() -> any TopLevelNode {
+        return parseIdentifierStart(in: .topLevel) as! any TopLevelNode
+    }
+    
+    private func parseBlockLevelIdentifier() -> any BlockLevelNode {
+        return parseIdentifierStart(in: .block)
+    }
+    
+    private func parseAssignmentStatement() -> AssignmentStatement {
+        guard let identifier = parseIdentifier(in: .assignmentStatement) else {
+            return AssignmentStatement.incomplete
+        }
+        
+        let recoverFromEqualMissing = expectAndBurn(.EQUAL, else: .expectedEqualInAssignment)
+        if let recoverFromEqualMissing {
+            recover(using: recoverFromEqualMissing)
+            return AssignmentStatement.incomplete
+        }
+        
+        let expressionNode = parseExpression(until: ";", min: 0)
+        
+        let recoverFromSemicolonMissing = expectAndBurn(.SEMICOLON, else: .expectedSemicolonToEndStatement(of: .definition))
+        if let recoverFromSemicolonMissing {
+            recover(using: recoverFromSemicolonMissing)
+        }
+        
+        return AssignmentStatement(name: identifier, expression: expressionNode)
     }
 
     /// Parses a function definition.
@@ -484,7 +618,7 @@ final class Parser: CompilerPhase {
             return parseDefinition()
             
         case .Identifier:
-            return parseFunctionApplication()
+            return parseBlockLevelIdentifier()
             
         case .Keyword("return", _):
             return parseReturnStatement()
@@ -518,16 +652,6 @@ final class Parser: CompilerPhase {
         }
     }
     
-    /// Parses a variable or constant definition.
-    ///
-    /// Grammar (simplified):
-    /// ```text
-    /// let <identifier> = <expr> ;
-    /// var <identifier> = <expr> ;
-    /// ```
-    ///
-    /// - Returns: A ``DefinitionNode`` (``LetDefinition`` or ``VarDefinition``),
-    ///   or an incomplete sentinel on error.
     private func parseDefinition() -> any DefinitionNode {
         
         let keyword: Token

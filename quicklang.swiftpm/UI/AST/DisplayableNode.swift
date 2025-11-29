@@ -176,5 +176,17 @@ class ConvertToDisplayableNode: ASTUpwardTransformer {
         finished(statement, display)
     }
     
+    func visitAssignmentStatement(
+        _ statement: AssignmentStatement,
+        _ finished: @escaping OnTransformEnd<AssignmentStatement>)
+    {
+        var displayExpr: DisplayableNode?
+        statement.expression.acceptUpwardTransformer(self) { _, part in
+            displayExpr = part
+        }
+        
+        let display = DisplayableNode(id: statement.id, name: "Assignment Statement", description: "", children: [displayExpr!])
+        finished(statement, display)
+    }
     
 }

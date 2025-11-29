@@ -7,7 +7,6 @@
 
 /// Performs static type checking over the AST.
 class Typechecker: SemaPass, ASTVisitor {
-    
     var errorManager: CompilerErrorManager?
     
     func begin(reportingTo: CompilerErrorManager) {
@@ -156,6 +155,10 @@ class Typechecker: SemaPass, ASTVisitor {
     /// Visits a `return` statement.
     func visitReturnStatement(_ statement: ReturnStatement) {
         statement.expression.acceptVisitor(self)
+    }
+    
+    func visitAssignmentStatement(_ statement: AssignmentStatement) {
+        // MARK: NOT DONE
     }
     
 }

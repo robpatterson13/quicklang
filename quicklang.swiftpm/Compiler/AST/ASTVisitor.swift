@@ -66,4 +66,6 @@ protocol ASTVisitor {
     ///
     /// Use to inspect the returned expression.
     func visitReturnStatement(_ statement: ReturnStatement)
+    
+    func visitAssignmentStatement(_ statement: AssignmentStatement)
 }

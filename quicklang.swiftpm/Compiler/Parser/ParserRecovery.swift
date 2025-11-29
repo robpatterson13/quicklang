@@ -74,7 +74,7 @@ class DefaultRecovery: RecoveryEngine {
         switch info {
         case .functionDefinition, .functionParameter:
             return .dropUntilEndOfFunction
-        case .valueDefinition, .functionApplication:
+        case .valueDefinition, .functionApplication, .assignmentStatement:
             return .dropUntilEndOfStatement
         }
     }
@@ -176,7 +176,7 @@ class DefaultRecovery: RecoveryEngine {
         switch info {
         case .eof:
             return .unrecoverable
-        case .boolean, .number, .symbol:
+        case .boolean, .number, .symbol, .identifier:
             return .dropUntilEndOfStatement
         case .keyword(let kw):
             // TODO: Replace ad-hoc keyword list with a proper enum-based classification.
@@ -188,7 +188,7 @@ class DefaultRecovery: RecoveryEngine {
         _ info: ExpectedBlockBodyPartErrorInfo.ErrorType
     ) -> RecoveryStrategy {
         switch info {
-        case .boolean, .number, .keyword, .symbol:
+        case .boolean, .number, .keyword, .symbol, .identifier:
             return .dropUntilEndOfFunction
         case .eof:
             return .unrecoverable

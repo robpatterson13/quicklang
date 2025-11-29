@@ -98,6 +98,9 @@ class AllowsRecursiveDefinition: ASTUpwardTransformer {
         finished(statement, .notApplicable)
     }
     
+    func visitAssignmentStatement(_ statement: AssignmentStatement, _ finished: @escaping OnTransformEnd<AssignmentStatement>) {
+        // MARK: NOT DONE
+    }
 }
 
 /// Collects names introduced by AST nodes during an upward (child → parent) traversal.
@@ -279,6 +282,10 @@ class SymbolGrabber: ASTUpwardTransformer {
         _ finished: @escaping OnTransformEnd<ReturnStatement>
     ) {
         finished(statement, [])
+    }
+    
+    func visitAssignmentStatement(_ statement: AssignmentStatement, _ finished: @escaping OnTransformEnd<AssignmentStatement>) {
+        // MARK: NOT DONE
     }
     
 }
@@ -557,6 +564,13 @@ class SymbolResolve: SemaPass, ASTDownwardTransformer {
         _ info: [BindingInScope]
     ) {
         statement.expression.acceptDownwardTransformer(self, info)
+    }
+    
+    func visitAssignmentStatement(
+        _ statement: AssignmentStatement,
+        _ info: [BindingInScope]
+    ) {
+        // MARK: NOT DONE
     }
     
     // MARK: - Block Processing

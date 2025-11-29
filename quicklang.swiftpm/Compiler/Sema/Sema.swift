@@ -177,7 +177,7 @@ final class Sema: CompilerPhase {
         }
         
         let finalResult = passResult as? ASTContext
-        return .success(result: finalResult)
+        return .success(result: context)
     }
 }
 
