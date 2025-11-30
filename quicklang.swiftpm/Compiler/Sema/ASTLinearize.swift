@@ -35,11 +35,11 @@ class ASTLinearize: SemaPass, ASTVisitor {
     }
     
     private func getNodeAndBindings<N: ExpressionNode>(
-        _ node: N,
+        expression: N,
         _ existingBindings: [any DefinitionNode]? = nil
     ) -> ((any ExpressionNode), [any DefinitionNode]) {
         
-        let (linearized, bindings) = node.acceptVisitor(self)
+        let (linearized, bindings) = expression.acceptVisitor(self)
         let newExpr = unwrap(linearized: linearized)
         
         let newBindings: [any DefinitionNode]
@@ -79,7 +79,7 @@ class ASTLinearize: SemaPass, ASTVisitor {
         _ operation: UnaryOperation,
         _ info: Void
     ) -> NewBindingInfo {
-        var (newExpr, newBindings) = getNodeAndBindings(operation.expression)
+        var (newExpr, newBindings) = getNodeAndBindings(expression: operation.expression)
         
         let newName = GenSymInfo.singleton.genSym(root: "unary_op", id: operation.id)
         let newOperation = UnaryOperation(op: operation.op, expression: newExpr)
@@ -97,8 +97,8 @@ class ASTLinearize: SemaPass, ASTVisitor {
         _ operation: BinaryOperation,
         _ info: Void
     ) -> NewBindingInfo {
-        let (newLhs, lhsBindings) = getNodeAndBindings(operation.lhs)
-        var (newRhs, newBindings) = getNodeAndBindings(operation.rhs, lhsBindings)
+        let (newLhs, lhsBindings) = getNodeAndBindings(expression: operation.lhs)
+        var (newRhs, newBindings) = getNodeAndBindings(expression: operation.rhs, lhsBindings)
         
         let newName = GenSymInfo.singleton.genSym(root: "binary_op", id: operation.id)
         let newOperation = BinaryOperation(op: operation.op, lhs: newLhs, rhs: newRhs)
@@ -129,7 +129,7 @@ class ASTLinearize: SemaPass, ASTVisitor {
     private func visitDefinition<T: DefinitionNode>(
         _ definition: T
     ) -> NewBindingInfo {
-        let (newExpr, newBindings) = getNodeAndBindings(definition.expression)
+        let (newExpr, newBindings) = getNodeAndBindings(expression: definition.expression)
         
         let newType = context.getType(of: newExpr)
         
@@ -170,7 +170,7 @@ class ASTLinearize: SemaPass, ASTVisitor {
         var bindings = [any DefinitionNode]()
         var args = [any ExpressionNode]()
         expression.arguments.forEach { arg in
-            let (newArg, newArgBindings) = getNodeAndBindings(arg, bindings)
+            let (newArg, newArgBindings) = getNodeAndBindings(expression: arg, bindings)
             args.append(newArg)
             bindings = newArgBindings
         }
@@ -190,7 +190,7 @@ class ASTLinearize: SemaPass, ASTVisitor {
         _ statement: IfStatement,
         _ info: Void
     ) -> NewBindingInfo {
-        let (newCond, bindings) = getNodeAndBindings(statement.condition)
+        let (newCond, bindings) = getNodeAndBindings(expression: statement.condition)
         
         let newThenBranch = linearizeBlock(statement.thenBranch)
         var newElseBranch: [any BlockLevelNode]? = nil
@@ -207,7 +207,7 @@ class ASTLinearize: SemaPass, ASTVisitor {
         _ statement: ReturnStatement,
         _ info: Void
     ) -> NewBindingInfo {
-        let (newReturn, newBindings) = getNodeAndBindings(statement.expression)
+        let (newReturn, newBindings) = getNodeAndBindings(expression: statement.expression)
         
         let newStatement = ReturnStatement(expression: newReturn)
         let result = LinearizedNodeResult.node(newStatement)
@@ -218,7 +218,7 @@ class ASTLinearize: SemaPass, ASTVisitor {
         _ statement: AssignmentStatement,
         _ info: Void
     ) -> NewBindingInfo {
-        let (newBoundExpr, newBindings) = getNodeAndBindings(statement.expression)
+        let (newBoundExpr, newBindings) = getNodeAndBindings(expression: statement.expression)
         
         let newStatement = AssignmentStatement(name: statement.name, expression: newBoundExpr)
         let result = LinearizedNodeResult.node(newStatement)
@@ -275,4 +275,3 @@ fileprivate final class GenSymInfo: @unchecked Sendable {
     
     private init() {}
 }
-
