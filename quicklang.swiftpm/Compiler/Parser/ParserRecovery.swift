@@ -5,48 +5,30 @@
 //  Created by Rob Patterson on 11/20/25.
 //
 
-/// Strategy for recovering from a parse error.
-///
-/// Encodes how the parser should proceed (drop tokens, synthesize tokens, ignore,
-/// or abort recovery) and allows layering via `override`.
 enum RecoveryStrategy: Error {
     
-    /// A set of tokens that signal a safe resynchronization point.
     typealias RecoverySet = Set<Token>
     
-    /// Discard tokens until one in the provided recovery set is found.
     case dropUntil(in: RecoverySet)
     
-    /// Convenience: drop until end-of-statement (`;`).
     static let dropUntilEndOfStatement = Self.dropUntil(in: [.SEMICOLON])
-    /// Convenience: drop until end-of-function (`}`).
     static let dropUntilEndOfFunction = Self.dropUntil(in: [.RBRACE])
     
-    /// Synthesize a missing token to continue.
     case add(token: Token)
     
-    /// Do nothing (continue parsing from current position).
     case ignore
     
-    /// Abort recovery for this error (escalate).
     case unrecoverable
     
-    /// Replace this strategy with a different one (allows late overrides).
     indirect case override(with: Self)
 }
 
-/// Component that maps a parser error to a recovery strategy.
 protocol RecoveryEngine {
-    /// Returns a recovery strategy for the given parse error.
     func recover(from error: ParserErrorType) -> RecoveryStrategy
 }
 
-/// Default recovery policy mapping specific parser errors to strategies.
-///
-/// Encapsulates heuristics for resynchronizing the parser after common syntax errors.
 class DefaultRecovery: RecoveryEngine {
     
-    /// Shared default instance.
     static var shared: DefaultRecovery {
         DefaultRecovery()
     }
@@ -195,7 +177,6 @@ class DefaultRecovery: RecoveryEngine {
         }
     }
     
-    /// Computes a recovery strategy for the given parser error.
     func recover(from error: ParserErrorType) -> RecoveryStrategy {
         switch error {
         case .expectedTypeIdentifier(where: let info):

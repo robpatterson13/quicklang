@@ -7,31 +7,14 @@
 
 import Foundation
 
-/// Common behavior for AST nodes that can represent incomplete or recovered syntax.
-///
-/// Many parser entry points may return sentinel "incomplete" nodes when recovery occurs.
-/// Conforming types expose an `isIncomplete` flag, a type-level `incomplete` value,
-/// and a convenience `anyIncomplete` property (via ``ASTNode`` extension) to detect
-/// incompleteness recursively within aggregates.
 protocol ASTNodeIncompletable {
-    /// Whether this concrete node instance is a placeholder produced by error recovery.
     var isIncomplete: Bool { get }
-    /// Whether this node or any nested node is incomplete. Implemented in an extension for ``ASTNode``.
     var anyIncomplete: Bool { get }
-    /// A sentinel incomplete node instance for this type.
     static var incomplete: Self { get }
 }
 
-/// Base protocol for all AST nodes.
-///
-/// Provides identity, hashing, and visitor support. Nodes conforming to this protocol
-/// can be visited by an ``ASTVisitor`` and compared by unique `id`.
 protocol ASTNode: Hashable, ASTNodeIncompletable {
-    /// A stable unique identifier for this node instance.
     var id: UUID { get }
-    /// Accepts a visitor that performs operations over the AST.
-    ///
-    /// - Parameter visitor: The visitor to dispatch to.
     func acceptVisitor(_ visitor: any ASTVisitor)
     
     func acceptUpwardTransformer<T: ASTUpwardTransformer>(_ transformer: T, _ finished: @escaping T.OnTransformEnd<Self>)
@@ -43,25 +26,18 @@ extension ASTNode {
     static func == (lhs: Self, rhs: Self) -> Bool {
         lhs.id == rhs.id
     }
-
+    
     func hash(into hasher: inout Hasher) {
         hasher.combine(id)
     }
 }
 
 extension ASTNode {
-    /// Returns true if this node or any nested node is incomplete.
-    ///
-    /// This method uses reflection to traverse child properties (including collections,
-    /// optionals, tuples, and nested structs/classes) and checks each for the incomplete
-    /// sentinel. It is useful for short-circuiting later compilation phases when recovery
-    /// has taken place.
     var anyIncomplete: Bool {
         if isIncomplete { return true }
         return Self._containsIncomplete(in: self)
     }
     
-    /// Recursively inspects an arbitrary value to determine whether it contains an incomplete AST node.
     private static func _containsIncomplete(in value: Any) -> Bool {
         
         if let node = value as? any ASTNode {
@@ -97,7 +73,6 @@ extension ASTNode {
         }
     }
     
-    /// Helper that checks for a stored property named `isIncomplete == true` on reflected values.
     private static func _hasTrueIsIncompleteFlag(_ mirror: Mirror) -> Bool {
         for (labelOpt, value) in mirror.children {
             if let label = labelOpt, label == "isIncomplete", let flag = value as? Bool, flag == true {
@@ -108,28 +83,18 @@ extension ASTNode {
     }
 }
 
-/// Root container for a parsed program.
-///
-/// Holds all top-level constructs (function definitions, value definitions, and
-/// top-level expressions that are permitted by the grammar).
 struct TopLevel {
-    /// The collection of top-level sections in the program.
     var sections: [any TopLevelNode]
 }
 
-/// Marker protocol for AST nodes valid at block scope.
-///
-/// Conforming nodes can appear within `{ ... }` blocks (e.g., statements or nested expressions).
 protocol BlockLevelNode: ASTNode {
     
 }
 
-/// Placeholder for an incomplete block-level node produced by error recovery.
 struct BlockLevelNodeIncomplete: BlockLevelNode {
     let id = UUID()
     var isIncomplete: Bool
     
-    /// Returns a new incomplete block-level node sentinel.
     static var incomplete: BlockLevelNodeIncomplete {
         BlockLevelNodeIncomplete()
     }
@@ -151,13 +116,8 @@ struct BlockLevelNodeIncomplete: BlockLevelNode {
     }
 }
 
-/// Marker protocol for top-level AST nodes.
-///
-/// Top-level nodes are also block-level nodes and may include function definitions,
-/// value definitions, and (in this language) function applications at the top level.
 protocol TopLevelNode: BlockLevelNode { }
 
-/// Placeholder for an incomplete top-level node produced by error recovery.
 struct TopLevelNodeIncomplete: TopLevelNode {
     let id = UUID()
     static var incomplete: TopLevelNodeIncomplete {
@@ -184,48 +144,29 @@ struct TopLevelNodeIncomplete: TopLevelNode {
 }
 
 extension TopLevelNode {
-    /// Convenience incomplete value for top-level nodes, defaulting to an incomplete function definition.
     static var incomplete: FuncDefinition {
         FuncDefinition.incomplete
     }
 }
 
-/// Marker protocol for expression nodes.
-///
-/// Expression nodes are visitable and also support a specialized type query entry point
-/// used by ``ASTContext`` during type inference and checking.
 protocol ExpressionNode: ASTNode {
-    /// Dispatches a type query to the given context.
-    ///
-    /// Nodes call the appropriate `ASTContext.queryTypeOf...` method within this function.
-    /// - Parameter context: The context that computes and caches expression types.
     func acceptTypeQuery(_ context: ASTContext)
 }
 
-/// Marker protocol for definition nodes (`let`/`var`) that can appear at top level.
-///
-/// Provides common access to the declared name, optional type annotation, and bound expression.
 protocol DefinitionNode: TopLevelNode {
-    /// The declared identifier.
     var name: String { get }
-    /// The optional explicit type annotation for the definition.
     var type: TypeName? { get }
-    /// The initializing expression bound to this definition.
     var expression: any ExpressionNode { get }
 }
 
-/// Marker protocol for statement nodes that occur within blocks.
 protocol StatementNode: BlockLevelNode { }
 
-/// An identifier expression (variable or function name reference).
 struct IdentifierExpression: ExpressionNode, TopLevelNode {
     let id = UUID()
-    /// The referenced name.
     let name: String
     
     let isIncomplete: Bool
     
-    /// Returns an incomplete sentinel for identifier expressions.
     static var incomplete: IdentifierExpression {
         return IdentifierExpression()
     }
@@ -235,8 +176,6 @@ struct IdentifierExpression: ExpressionNode, TopLevelNode {
         self.isIncomplete = true
     }
     
-    /// Creates a fully-formed identifier expression.
-    /// - Parameter name: The referenced symbol name.
     init(name: String) {
         self.name = name
         self.isIncomplete = false
@@ -265,15 +204,12 @@ struct IdentifierExpression: ExpressionNode, TopLevelNode {
     }
 }
 
-/// A boolean literal expression.
 struct BooleanExpression: ExpressionNode {
     let id = UUID()
-    /// The literal boolean value.
     let value: Bool
     
     let isIncomplete: Bool
     
-    /// Returns an incomplete sentinel for boolean expressions.
     static var incomplete: BooleanExpression {
         return BooleanExpression()
     }
@@ -283,8 +219,6 @@ struct BooleanExpression: ExpressionNode {
         self.isIncomplete = true
     }
     
-    /// Creates a boolean literal expression.
-    /// - Parameter value: The literal value.
     init(value: Bool) {
         self.value = value
         self.isIncomplete = false
@@ -313,15 +247,12 @@ struct BooleanExpression: ExpressionNode {
     }
 }
 
-/// A numeric literal expression (integer).
 struct NumberExpression: ExpressionNode {
     let id = UUID()
-    /// The literal integer value.
     let value: Int
     
     let isIncomplete: Bool
     
-    /// Returns an incomplete sentinel for number expressions.
     static var incomplete: NumberExpression {
         return NumberExpression()
     }
@@ -331,8 +262,6 @@ struct NumberExpression: ExpressionNode {
         self.isIncomplete = true
     }
     
-    /// Creates a numeric literal expression.
-    /// - Parameter value: The integer value.
     init(value: Int) {
         self.value = value
         self.isIncomplete = false
@@ -361,22 +290,18 @@ struct NumberExpression: ExpressionNode {
     }
 }
 
-/// A unary operation expression.
 struct UnaryOperation: ExpressionNode {
     let id = UUID()
     
-    /// The operator applied to `expression`.
     let op: Operator
     enum Operator {
         case not
         case neg
     }
-    /// The operand expression.
     let expression: any ExpressionNode
     
     let isIncomplete: Bool
     
-    /// Returns an incomplete sentinel for unary operations.
     static var incomplete: UnaryOperation {
         return UnaryOperation()
     }
@@ -387,10 +312,6 @@ struct UnaryOperation: ExpressionNode {
         self.isIncomplete = true
     }
     
-    /// Creates a unary operation.
-    /// - Parameters:
-    ///   - op: The unary operator.
-    ///   - expression: The operand expression.
     init(op: Operator, expression: any ExpressionNode) {
         self.op = op
         self.expression = expression
@@ -420,10 +341,8 @@ struct UnaryOperation: ExpressionNode {
     }
 }
 
-/// A binary operation expression.
 struct BinaryOperation: ExpressionNode {
     let id = UUID()
-    /// The operator applied between `lhs` and `rhs`.
     let op: Operator
     enum Operator {
         case plus
@@ -433,12 +352,10 @@ struct BinaryOperation: ExpressionNode {
         case and
         case or
     }
-    /// The left-hand operand.
     let lhs, rhs: any ExpressionNode
     
     let isIncomplete: Bool
     
-    /// Returns an incomplete sentinel for binary operations.
     static var incomplete: BinaryOperation {
         return BinaryOperation()
     }
@@ -450,11 +367,6 @@ struct BinaryOperation: ExpressionNode {
         self.isIncomplete = true
     }
     
-    /// Creates a binary operation.
-    /// - Parameters:
-    ///   - op: The binary operator.
-    ///   - lhs: The left-hand operand.
-    ///   - rhs: The right-hand operand.
     init(op: Operator, lhs: any ExpressionNode, rhs: any ExpressionNode) {
         self.op = op
         self.lhs = lhs
@@ -485,19 +397,14 @@ struct BinaryOperation: ExpressionNode {
     }
 }
 
-/// A `let` constant definition.
 struct LetDefinition: DefinitionNode  {
     let id = UUID()
-    /// The defined name.
     let name: String
-    /// Optional explicit type annotation.
     let type: TypeName?
-    /// The initializing expression.
     let expression: any ExpressionNode
     
     let isIncomplete: Bool
     
-    /// Returns an incomplete sentinel for `let` definitions.
     static var incomplete: LetDefinition {
         return LetDefinition()
     }
@@ -509,10 +416,6 @@ struct LetDefinition: DefinitionNode  {
         self.isIncomplete = true
     }
     
-    /// Creates a `let` definition without an explicit type annotation.
-    /// - Parameters:
-    ///   - name: The declared identifier.
-    ///   - expression: The initializer expression.
     init(name: String, type: TypeName, expression: any ExpressionNode) {
         self.name = name
         self.type = type
@@ -539,19 +442,14 @@ struct LetDefinition: DefinitionNode  {
     }
 }
 
-/// A `var` variable definition.
 struct VarDefinition: DefinitionNode {
     let id = UUID()
-    /// The defined name.
     let name: String
-    /// Optional explicit type annotation.
     let type: TypeName?
-    /// The initializing expression.
     let expression: any ExpressionNode
     
     let isIncomplete: Bool
     
-    /// Returns an incomplete sentinel for `var` definitions.
     static var incomplete: VarDefinition {
         return VarDefinition()
     }
@@ -563,10 +461,6 @@ struct VarDefinition: DefinitionNode {
         self.isIncomplete = true
     }
     
-    /// Creates a `var` definition without an explicit type annotation.
-    /// - Parameters:
-    ///   - name: The declared identifier.
-    ///   - expression: The initializer expression.
     init(name: String, type: TypeName, expression: any ExpressionNode) {
         self.name = name
         self.type = type
@@ -593,7 +487,6 @@ struct VarDefinition: DefinitionNode {
     }
 }
 
-/// The set of built-in type names in the language.
 enum TypeName: Equatable {
     case Bool
     case Int
@@ -616,18 +509,12 @@ enum TypeName: Equatable {
     }
 }
 
-/// A function definition.
 struct FuncDefinition: TopLevelNode {
     
-    /// A single function parameter.
     struct Parameter {
-        /// The parameter name.
         let name: String
-        /// The parameter type.
         let type: TypeName
-        /// Whether this parameter entry was synthesized during recovery.
         let isIncomplete: Bool
-        /// Returns an incomplete sentinel for parameters.
         static var incomplete: Parameter {
             return Parameter()
         }
@@ -638,10 +525,6 @@ struct FuncDefinition: TopLevelNode {
             self.isIncomplete = true
         }
         
-        /// Creates a fully-formed parameter.
-        /// - Parameters:
-        ///   - name: The parameter name.
-        ///   - type: The parameter type.
         init(name: String, type: TypeName) {
             self.name = name
             self.type = type
@@ -650,18 +533,13 @@ struct FuncDefinition: TopLevelNode {
     }
     
     let id = UUID()
-    /// The function name.
     let name: String
-    /// The declared return type.
     let type: TypeName
-    /// The ordered parameter list.
     let parameters: [Parameter]
-    /// The function body as a sequence of block-level nodes.
     let body: [any BlockLevelNode]
     
     let isIncomplete: Bool
     
-    /// Returns an incomplete sentinel for function definitions.
     static var incomplete: FuncDefinition {
         return FuncDefinition()
     }
@@ -674,12 +552,6 @@ struct FuncDefinition: TopLevelNode {
         self.isIncomplete = true
     }
     
-    /// Creates a fully-formed function definition.
-    /// - Parameters:
-    ///   - name: The function name.
-    ///   - type: The declared return type.
-    ///   - parameters: The ordered parameter list.
-    ///   - body: The function body.
     init(name: String, type: TypeName, parameters: [Parameter], body: [any BlockLevelNode]) {
         self.name = name
         self.type = type
@@ -707,17 +579,13 @@ struct FuncDefinition: TopLevelNode {
     }
 }
 
-/// A function application expression, which is also permitted as a top-level statement.
 struct FuncApplication: ExpressionNode, TopLevelNode {
     let id = UUID()
-    /// The callee name.
     let name: String
-    /// The ordered actual arguments.
     let arguments: [any ExpressionNode]
     
     let isIncomplete: Bool
     
-    /// Returns an incomplete sentinel for function applications.
     static var incomplete: FuncApplication {
         return FuncApplication()
     }
@@ -728,10 +596,6 @@ struct FuncApplication: ExpressionNode, TopLevelNode {
         self.isIncomplete = true
     }
     
-    /// Creates a function application.
-    /// - Parameters:
-    ///   - name: The callee name.
-    ///   - arguments: The ordered list of argument expressions.
     init(name: String, arguments: [any ExpressionNode]) {
         self.name = name
         self.arguments = arguments
@@ -761,19 +625,14 @@ struct FuncApplication: ExpressionNode, TopLevelNode {
     }
 }
 
-/// An `if` statement with optional `else` branch.
 struct IfStatement: StatementNode, BlockLevelNode {
     let id = UUID()
-    /// The boolean condition expression.
     let condition: any ExpressionNode
-    /// The then-branch body.
     let thenBranch: [any BlockLevelNode]
-    /// The else-branch body, if present.
     let elseBranch: [any BlockLevelNode]?
     
     let isIncomplete: Bool
     
-    /// Returns an incomplete sentinel for `if` statements.
     static var incomplete: IfStatement {
         return IfStatement()
     }
@@ -785,11 +644,6 @@ struct IfStatement: StatementNode, BlockLevelNode {
         self.isIncomplete = true
     }
     
-    /// Creates an `if` statement.
-    /// - Parameters:
-    ///   - condition: The condition expression (expected to be boolean).
-    ///   - thenBranch: The then-branch body.
-    ///   - elseBranch: The optional else-branch body.
     init(condition: any ExpressionNode, thenBranch: [any BlockLevelNode], elseBranch: [any BlockLevelNode]?) {
         self.condition = condition
         self.thenBranch = thenBranch
@@ -816,14 +670,11 @@ struct IfStatement: StatementNode, BlockLevelNode {
     }
 }
 
-/// A `return` statement.
 struct ReturnStatement: StatementNode, BlockLevelNode {
     let id = UUID()
-    /// The returned expression.
     let expression: any ExpressionNode
     
     let isIncomplete: Bool
-    /// Returns an incomplete sentinel for `return` statements.
     static var incomplete: ReturnStatement {
         return ReturnStatement()
     }
@@ -833,8 +684,6 @@ struct ReturnStatement: StatementNode, BlockLevelNode {
         self.isIncomplete = true
     }
     
-    /// Creates a `return` statement.
-    /// - Parameter expression: The expression to return.
     init(expression: any ExpressionNode) {
         self.expression = expression
         self.isIncomplete = false
@@ -892,7 +741,6 @@ struct AssignmentStatement: StatementNode, TopLevelNode {
     func acceptDownwardTransformer<T>(_ transformer: T, _ info: T.TransformationInfo) where T : ASTDownwardTransformer {
         transformer.visitAssignmentStatement(self, info)
     }
-    
     
 }
 
