@@ -15,10 +15,11 @@ final class Parser: CompilerPhase {
     
     private var context = ASTContext()
     
-    private let recoveryEngine: any RecoveryEngine = DefaultRecovery.shared
+    private let recoveryEngine: any RecoveryEngine
     
-    init(errorManager: CompilerErrorManager) {
+    init(errorManager: CompilerErrorManager, settings: DriverSettings) {
         self.errorManager = errorManager
+        recoveryEngine = settings.parserRecoveryStrategy
     }
     
     func begin(_ input: Lexer.SuccessfulResult) -> PhaseResult<Parser> {
@@ -77,7 +78,7 @@ final class Parser: CompilerPhase {
         return .failure(strategy)
     }
     
-    private func expectAndBurn(_ token: Token? = nil, else error: ParserErrorType) -> RecoveryStrategy? {
+    private func consume(_ token: Token? = nil, else error: ParserErrorType) -> RecoveryStrategy? {
         switch expect(token, else: error, burnToken: true) {
         case .success:
             return nil
@@ -241,7 +242,7 @@ final class Parser: CompilerPhase {
         }
         
         switch twoAhead {
-        case .RPAREN:
+        case .LPAREN:
             switch site {
             case .topLevel:
                 return parseTopLevelFunctionApplication()
@@ -282,7 +283,7 @@ final class Parser: CompilerPhase {
             return AssignmentStatement.incomplete
         }
         
-        let recoverFromEqualMissing = expectAndBurn(.EQUAL, else: .expectedEqualInAssignment)
+        let recoverFromEqualMissing = consume(.EQUAL, else: .expectedEqualInAssignment)
         if let recoverFromEqualMissing {
             recover(using: recoverFromEqualMissing)
             return AssignmentStatement.incomplete
@@ -290,7 +291,7 @@ final class Parser: CompilerPhase {
         
         let expressionNode = parseExpression(until: ";", min: 0)
         
-        let recoverFromSemicolonMissing = expectAndBurn(.SEMICOLON, else: .expectedSemicolonToEndStatement(of: .definition))
+        let recoverFromSemicolonMissing = consume(.SEMICOLON, else: .expectedSemicolonToEndStatement(of: .definition))
         if let recoverFromSemicolonMissing {
             recover(using: recoverFromSemicolonMissing)
         }
@@ -300,7 +301,7 @@ final class Parser: CompilerPhase {
     
     private func parseFunctionDefinition() -> FuncDefinition {
         
-        let recoverFromFuncKeywordMissing = expectAndBurn(
+        let recoverFromFuncKeywordMissing = consume(
             .FUNC,
             else: .internalParserError(type: .unreachable("Can only be called when func keyword is encountered"))
         )
@@ -313,7 +314,7 @@ final class Parser: CompilerPhase {
             return .incomplete
         }
         
-        let recoverFromLParenMissing = expectAndBurn(.LPAREN, else: .expectedLeftParen(where: .functionDefinition))
+        let recoverFromLParenMissing = consume(.LPAREN, else: .expectedLeftParen(where: .functionDefinition))
         if let recoverFromLParenMissing {
             recover(using: recoverFromLParenMissing)
             return .incomplete
@@ -326,13 +327,13 @@ final class Parser: CompilerPhase {
         
         context.addParamsTo(func: identifier, parameters)
         
-        let recoverFromRParenMissing = expectAndBurn(.RPAREN, else: .expectedRightParen(where: .functionDefinition))
+        let recoverFromRParenMissing = consume(.RPAREN, else: .expectedRightParen(where: .functionDefinition))
         if let recoverFromRParenMissing {
             recover(using: recoverFromRParenMissing)
             return .incomplete
         }
         
-        let recoverFromArrowMissing = expectAndBurn(.ARROW, else: .expectedArrowInFunctionDefinition)
+        let recoverFromArrowMissing = consume(.ARROW, else: .expectedArrowInFunctionDefinition)
         if let recoverFromArrowMissing {
             recover(using: recoverFromArrowMissing)
             return .incomplete
@@ -381,7 +382,7 @@ final class Parser: CompilerPhase {
         
         var bodyParts: [any BlockLevelNode] = []
         
-        let recoverFromLBraceMissing = expectAndBurn(.LBRACE, else: .expectedLeftBrace(where: usage.errorTypeForLeft))
+        let recoverFromLBraceMissing = consume(.LBRACE, else: .expectedLeftBrace(where: usage.errorTypeForLeft))
         if let recoverFromLBraceMissing {
             recover(using: recoverFromLBraceMissing)
             return [FuncApplication.incomplete]
@@ -394,7 +395,7 @@ final class Parser: CompilerPhase {
             }
         }
         
-        let recoverFromRBraceMissing = expectAndBurn(.RBRACE, else: .expectedRightBrace(where: usage.errorTypeForRight))
+        let recoverFromRBraceMissing = consume(.RBRACE, else: .expectedRightBrace(where: usage.errorTypeForRight))
         if let recoverFromRBraceMissing {
             recover(using: recoverFromRBraceMissing)
             bodyParts.append(FuncApplication.incomplete)
@@ -405,7 +406,7 @@ final class Parser: CompilerPhase {
     
     private func parseIfStatement() -> IfStatement {
         
-        let recoverFromIfKeywordMissing = expectAndBurn(
+        let recoverFromIfKeywordMissing = consume(
             .IF,
             else: .internalParserError(type: .unreachable("This should never be reached without an if being parsed"))
         )
@@ -414,7 +415,7 @@ final class Parser: CompilerPhase {
             return .incomplete
         }
         
-        let recoverFromLParenMissing = expectAndBurn(.LPAREN, else: .expectedLeftParen(where: .ifStatement))
+        let recoverFromLParenMissing = consume(.LPAREN, else: .expectedLeftParen(where: .ifStatement))
         if let recoverFromLParenMissing {
             recover(using: recoverFromLParenMissing)
             return .incomplete
@@ -425,7 +426,7 @@ final class Parser: CompilerPhase {
             return .incomplete
         }
         
-        let recoverFromRParenMissing = expectAndBurn(.RPAREN, else: .expectedRightParen(where: .ifStatement))
+        let recoverFromRParenMissing = consume(.RPAREN, else: .expectedRightParen(where: .ifStatement))
         if let recoverFromRParenMissing {
             recover(using: recoverFromRParenMissing)
             return .incomplete
@@ -452,7 +453,7 @@ final class Parser: CompilerPhase {
     
     private func parseReturnStatement() -> ReturnStatement {
         
-        let recoverFromReturnKeywordMissing = expectAndBurn(
+        let recoverFromReturnKeywordMissing = consume(
             .RETURN,
             else: .internalParserError(type: .unreachable("We should never get here without first parsing a return token"))
         )
@@ -463,7 +464,7 @@ final class Parser: CompilerPhase {
         
         let node = ReturnStatement(expression: parseExpression(until: ";", min: 0))
         
-        let recoverFromSemicolonMissing = expectAndBurn(.SEMICOLON, else: .expectedSemicolonToEndStatement(of: .return))
+        let recoverFromSemicolonMissing = consume(.SEMICOLON, else: .expectedSemicolonToEndStatement(of: .return))
         if let recoverFromSemicolonMissing {
             recover(using: recoverFromSemicolonMissing)
         }
@@ -559,7 +560,7 @@ final class Parser: CompilerPhase {
             return LetDefinition.incomplete
         }
         
-        let recoverFromColonMissing = expectAndBurn(.COLON, else: .expectedTypeIdentifier(where: .definitionType))
+        let recoverFromColonMissing = consume(.COLON, else: .expectedTypeIdentifier(where: .definitionType))
         if let recoverFromColonMissing {
             recover(using: recoverFromColonMissing)
             return LetDefinition.incomplete
@@ -572,7 +573,7 @@ final class Parser: CompilerPhase {
         
         context.assignTypeOf(type, to: identifier)
         
-        let recoverFromEqualMissing = expectAndBurn(.EQUAL, else: .expectedEqualInAssignment)
+        let recoverFromEqualMissing = consume(.EQUAL, else: .expectedEqualInAssignment)
         if let recoverFromEqualMissing {
             recover(using: recoverFromEqualMissing)
             return LetDefinition.incomplete
@@ -580,7 +581,7 @@ final class Parser: CompilerPhase {
         
         let boundExpression = parseExpression(until: ";", min: 0)
         
-        let recoverFromSemicolonMissing = expectAndBurn(.SEMICOLON, else: .expectedSemicolonToEndStatement(of: .definition))
+        let recoverFromSemicolonMissing = consume(.SEMICOLON, else: .expectedSemicolonToEndStatement(of: .definition))
         if let recoverFromSemicolonMissing {
             recover(using: recoverFromSemicolonMissing)
         }
@@ -717,7 +718,7 @@ final class Parser: CompilerPhase {
                 return parameters
             }
             
-            let recoverFromColonMissing = expectAndBurn(.COLON, else: .expectedParameterType)
+            let recoverFromColonMissing = consume(.COLON, else: .expectedParameterType)
             if let recoverFromColonMissing {
                 recover(using: recoverFromColonMissing)
                 parameters.append(.incomplete)
@@ -736,7 +737,7 @@ final class Parser: CompilerPhase {
                 return parameters
             }
             
-            let recoverFromCommaMissing = expectAndBurn(.COMMA, else: .expectedParameterType)
+            let recoverFromCommaMissing = consume(.COMMA, else: .expectedParameterType)
             if let recoverFromCommaMissing {
                 recover(using: recoverFromCommaMissing)
                 parameters.append(.incomplete)
@@ -777,7 +778,7 @@ final class Parser: CompilerPhase {
     private func parseTopLevelFunctionApplication() -> FuncApplication {
         let functionApplication = parseFunctionApplication()
         
-        let recoverFromSemicolonMissing = expectAndBurn(.SEMICOLON, else: .expectedSemicolonToEndFunctionCall)
+        let recoverFromSemicolonMissing = consume(.SEMICOLON, else: .expectedSemicolonToEndFunctionCall)
         if let recoverFromSemicolonMissing {
             recover(using: recoverFromSemicolonMissing)
         }
@@ -792,7 +793,7 @@ final class Parser: CompilerPhase {
             return .incomplete
         }
         
-        let recoverFromLParenMissing = expectAndBurn(.LPAREN, else: .expectedFunctionApplication)
+        let recoverFromLParenMissing = consume(.LPAREN, else: .expectedFunctionApplication)
         if let recoverFromLParenMissing {
             recover(using: recoverFromLParenMissing)
             return .incomplete
@@ -817,7 +818,7 @@ final class Parser: CompilerPhase {
             }
         }
         
-        let recoverFromRParenMissing = expectAndBurn(.RPAREN, else: .expectedRightParen(where: .functionApplication))
+        let recoverFromRParenMissing = consume(.RPAREN, else: .expectedRightParen(where: .functionApplication))
         if let recoverFromRParenMissing {
             recover(using: recoverFromRParenMissing)
             return .incomplete

@@ -89,7 +89,7 @@ final class Lexer: CompilerPhase {
     
     private let syntaxManager = LexerSyntaxInfoManager()
     
-    init(errorManager: CompilerErrorManager) {
+    init(errorManager: CompilerErrorManager, settings: DriverSettings) {
         self.errorManager = errorManager
     }
     

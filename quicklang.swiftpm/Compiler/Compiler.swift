@@ -9,7 +9,7 @@ protocol CompilerPhase {
     associatedtype InputType
     associatedtype SuccessfulResult
     
-    init(errorManager: CompilerErrorManager)
+    init(errorManager: CompilerErrorManager, settings: DriverSettings)
     
     func begin(_ input: InputType) -> PhaseResult<Self>
 }
@@ -20,6 +20,7 @@ enum PhaseResult<Phase: CompilerPhase> {
 }
 
 struct DriverSettings {
+    var parserRecoveryStrategy: RecoveryEngine = DefaultRecovery.shared
     var onlyLexer: Bool = false
 }
 
@@ -44,7 +45,7 @@ class Compiler {
         resetPhases()
         
         let lexResult: Lexer.SuccessfulResult
-        switch startLexing(source) {
+        switch startLexing(source, settings: settings) {
         case .success(result: let result):
             lexResult = result
         case .failure:
@@ -57,7 +58,7 @@ class Compiler {
         }
         
         let parseResult: Parser.SuccessfulResult
-        switch startParsing(lexResult) {
+        switch startParsing(lexResult, settings: settings) {
         case .success(result: let result):
             print(result.tree)
             parseResult = result
@@ -68,7 +69,7 @@ class Compiler {
         
         bridge?.sendDisplayNodes(from: parseResult)
         
-        switch startSema(passes: Sema.defaultPasses, parseResult) {
+        switch startSema(passes: Sema.defaultPasses, parseResult, settings: settings) {
         case .success(result: let result):
             if let result {
                 print(result.tree)
@@ -79,9 +80,9 @@ class Compiler {
         }
     }
     
-    private func startLexing(_ source: Lexer.SourceCode) -> PhaseResult<Lexer> {
+    private func startLexing(_ source: Lexer.SourceCode, settings: DriverSettings) -> PhaseResult<Lexer> {
         if lexer == nil {
-            lexer = Lexer(errorManager: errorManager)
+            lexer = Lexer(errorManager: errorManager, settings: settings)
         }
         
         let result = lexer!.begin(source)
@@ -90,17 +91,17 @@ class Compiler {
         return result
     }
     
-    private func startParsing(_ tokens: Lexer.SuccessfulResult) -> PhaseResult<Parser> {
+    private func startParsing(_ tokens: Lexer.SuccessfulResult, settings: DriverSettings) -> PhaseResult<Parser> {
         if parser == nil {
-            parser = Parser(errorManager: errorManager)
+            parser = Parser(errorManager: errorManager, settings: settings)
         }
         
         return parser!.begin(tokens)
     }
     
-    private func startSema(passes: [Sema.PassType], _ tree: Parser.SuccessfulResult) -> PhaseResult<Sema> {
+    private func startSema(passes: [Sema.PassType], _ tree: Parser.SuccessfulResult, settings: DriverSettings) -> PhaseResult<Sema> {
         if sema == nil {
-            sema = Sema(errorManager: errorManager)
+            sema = Sema(errorManager: errorManager, settings: settings)
         }
         
         let input: Sema.InputType = (context: tree, passes: passes)

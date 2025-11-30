@@ -339,8 +339,8 @@ class SymbolResolve: SemaPass, ASTDownwardTransformer {
         _ expression: FuncApplication,
         _ info: [BindingInScope]
     ) {
-        if !info.contains(where: { $0 == expression.name }) {
-            addError(.identifierUnbound(name: expression.name), at: .beginningOfFile)
+        if !info.contains(expression.name) {
+            addError(.functionNotFound(name: expression.name), at: .beginningOfFile)
         }
         
         expression.arguments.forEach { $0.acceptDownwardTransformer(self, info) }
@@ -475,19 +475,19 @@ class DefaultSymbolResolveErrorCreator: SymbolResolveErrorCreator {
     private init() {}
     
     func functionNotFound(info: FunctionNotFoundErrorInfo) -> SymbolResolveError {
-        SymbolResolveError(location: .beginningOfFile, message: "s1")
+        SymbolResolveError(location: info.location, message: "Function \(info.name) is not defined")
     }
     
     func shadowing(info: ShadowingErrorInfo) -> SymbolResolveError {
-        SymbolResolveError(location: .beginningOfFile, message: "s2")
+        SymbolResolveError(location: info.location, message: "Name \(info.name) is already defined")
     }
     
     func parameterNamesNotUnique(info: ParameterNamesNotUniqueErrorInfo) -> SymbolResolveError {
-        SymbolResolveError(location: .beginningOfFile, message: "s3")
+        SymbolResolveError(location: info.location, message: "Parameter name \(info.repeated) is not unique")
     }
     
     func identifierUnbound(info: IdentifierUnboundErrorInfo) -> SymbolResolveError {
-        SymbolResolveError(location: .beginningOfFile, message: "s4")
+        SymbolResolveError(location: info.location, message: "Variable \(info.name) is not defined")
     }
 }
 

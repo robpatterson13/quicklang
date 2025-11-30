@@ -41,7 +41,8 @@ final class Sema: CompilerPhase {
     private let errorManager: CompilerErrorManager
     
     init(
-        errorManager: CompilerErrorManager
+        errorManager: CompilerErrorManager,
+        settings: DriverSettings
     ) {
         self.errorManager = errorManager
     }
@@ -63,6 +64,10 @@ final class Sema: CompilerPhase {
         
         var passResult: Any? = nil
         passes.forEach { passType in
+            if errorManager.hasErrors {
+                return
+            }
+            
             let pass: any SemaPass
             if let newContext = passResult as? ASTContext {
                 pass = passType.makePassManager(using: newContext)
@@ -74,10 +79,6 @@ final class Sema: CompilerPhase {
             let result = pass.begin(reportingTo: errorManager)
             if let result = result as? ASTContext {
                 passResult = result
-            }
-            
-            if errorManager.hasErrors {
-                return
             }
         }
         

@@ -17,11 +17,23 @@ class ProgramEditorViewModel {
     var errors: [String] = []
     var mapping: LexerSyntaxInfoManager.SyntaxMapping?
     var theme: Theme = .default
+    var isParserRecovering: Bool = true
     
     func sendToDriver() {
         if !text.string.isEmpty {
-            bridge?.sendSourceCode(text.string)
+            var settings = buildSettings()
+            bridge?.sendSourceCode(text.string, with: settings)
         }
+    }
+    
+    private func buildSettings() -> DriverSettings {
+        var settings = DriverSettings()
+        
+        if !isParserRecovering {
+            settings.parserRecoveryStrategy = NoRecovery()
+        }
+        
+        return settings
     }
     
     func receiveDisplayTree(_ tree: [DisplayableNode]) {
@@ -86,6 +98,9 @@ struct ProgramEditor: View {
                     .frame(width: 20, height: 20)
             }
             .foregroundStyle(Color(.white))
+            
+            Toggle("Enable Parser Recovery", isOn: $viewModel.isParserRecovering)
+                .padding()
             
             Spacer()
         }

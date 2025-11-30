@@ -16,8 +16,8 @@ class MainBridge {
         viewModel.bridge = self
     }
     
-    func sendSourceCode(_ source: String) {
-        driver.startDriver(source)
+    func sendSourceCode(_ source: String, with settings: DriverSettings = .init()) {
+        driver.startDriver(source, settings: settings)
     }
     
     func reportErrors(from errorManager: CompilerErrorManager) {
