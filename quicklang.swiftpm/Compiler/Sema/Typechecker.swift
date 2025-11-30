@@ -6,6 +6,9 @@
 //
 
 class Typechecker: SemaPass, ASTVisitor {
+    typealias VisitorResult = Void
+    typealias VisitorInfo = Void
+    
     var errorManager: CompilerErrorManager?
     
     func begin(reportingTo: CompilerErrorManager) {
@@ -40,13 +43,13 @@ class Typechecker: SemaPass, ASTVisitor {
         }
     }
     
-    func visitIdentifierExpression(_ expression: IdentifierExpression) {}
+    func visitIdentifierExpression(_ expression: IdentifierExpression, _ info: Void) {}
     
-    func visitBooleanExpression(_ expression: BooleanExpression) {}
+    func visitBooleanExpression(_ expression: BooleanExpression, _ info: Void) {}
     
-    func visitNumberExpression(_ expression: NumberExpression) {}
+    func visitNumberExpression(_ expression: NumberExpression, _ info: Void) {}
     
-    func visitUnaryOperation(_ operation: UnaryOperation) {
+    func visitUnaryOperation(_ operation: UnaryOperation, _ info: Void) {
         switch operation.op {
         case .not, .neg:
             if !isExpression(operation.expression, type: .Bool) {
@@ -57,7 +60,7 @@ class Typechecker: SemaPass, ASTVisitor {
         operation.expression.acceptVisitor(self)
     }
     
-    func visitBinaryOperation(_ operation: BinaryOperation) {
+    func visitBinaryOperation(_ operation: BinaryOperation, _ info: Void) {
         switch operation.op {
         case .plus, .minus, .times:
             if !isExpression(operation.lhs, type: .Int),
@@ -75,15 +78,15 @@ class Typechecker: SemaPass, ASTVisitor {
         operation.rhs.acceptVisitor(self)
     }
     
-    func visitLetDefinition(_ definition: LetDefinition) {
+    func visitLetDefinition(_ definition: LetDefinition, _ info: Void) {
         checkDefinition(definition)
     }
     
-    func visitVarDefinition(_ definition: VarDefinition) {
+    func visitVarDefinition(_ definition: VarDefinition, _ info: Void) {
         checkDefinition(definition)
     }
     
-    func visitFuncDefinition(_ definition: FuncDefinition) {
+    func visitFuncDefinition(_ definition: FuncDefinition, _ info: Void) {
         // do the body of the definition first
         definition.body.forEach { $0.acceptVisitor(self) }
         
@@ -115,7 +118,7 @@ class Typechecker: SemaPass, ASTVisitor {
         }
     }
     
-    func visitFuncApplication(_ expression: FuncApplication) {
+    func visitFuncApplication(_ expression: FuncApplication, _ info: Void) {
         let params = context.getFuncParams(of: expression.name)
         
         for (idx, arg) in expression.arguments.enumerated()
@@ -128,7 +131,7 @@ class Typechecker: SemaPass, ASTVisitor {
         expression.arguments.forEach { $0.acceptVisitor(self) }
     }
     
-    func visitIfStatement(_ statement: IfStatement) {
+    func visitIfStatement(_ statement: IfStatement, _ info: Void) {
         if !isExpression(statement.condition, type: .Bool) {
             let actuallyIs = context.getType(of: statement.condition)
             addError(.ifConditionNotBool(is: actuallyIs), at: .beginningOfFile)
@@ -138,11 +141,11 @@ class Typechecker: SemaPass, ASTVisitor {
         statement.elseBranch?.forEach { $0.acceptVisitor(self) }
     }
     
-    func visitReturnStatement(_ statement: ReturnStatement) {
+    func visitReturnStatement(_ statement: ReturnStatement, _ info: Void) {
         statement.expression.acceptVisitor(self)
     }
     
-    func visitAssignmentStatement(_ statement: AssignmentStatement) {
+    func visitAssignmentStatement(_ statement: AssignmentStatement, _ info: Void) {
         // MARK: NOT DONE
     }
     

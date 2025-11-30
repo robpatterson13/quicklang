@@ -153,12 +153,10 @@ class ASTContext {
     func getGlobalSymbols(excluding: String? = nil) -> [String] {
         var globals: [String] = []
         tree.sections.forEach { node in
-            node.acceptUpwardTransformer(SymbolGrabber.shared) { _, bindings in
-                if let excluding, bindings.contains(excluding) {
-                    globals.append(contentsOf: bindings.filter({ $0 != excluding }))
-                    return
-                }
-                
+            let bindings = node.acceptVisitor(SymbolGrabber.shared)
+            if let excluding, bindings.contains(excluding) {
+                globals.append(contentsOf: bindings.filter({ $0 != excluding }))
+            } else {
                 globals.append(contentsOf: bindings)
             }
         }

@@ -5,7 +5,7 @@
 //  Created by Rob Patterson on 11/15/25.
 //
 
-class AllowsRecursiveDefinition: ASTUpwardTransformer {
+class AllowsRecursiveDefinition: ASTVisitor {
     
     enum Verdict {
         case no
@@ -13,7 +13,7 @@ class AllowsRecursiveDefinition: ASTUpwardTransformer {
         case notApplicable
     }
     
-    typealias TransformerInfo = Verdict
+    typealias VisitorResult = Verdict
     
     static var shared: AllowsRecursiveDefinition {
         AllowsRecursiveDefinition()
@@ -23,92 +23,94 @@ class AllowsRecursiveDefinition: ASTUpwardTransformer {
     
     func visitIdentifierExpression(
         _ expression: IdentifierExpression,
-        _ finished: @escaping OnTransformEnd<IdentifierExpression>
-    ) {
-        finished(expression, .notApplicable)
+        _ info: Void
+    ) -> Verdict {
+        .notApplicable
     }
     
     func visitBooleanExpression(
         _ expression: BooleanExpression,
-        _ finished: @escaping OnTransformEnd<BooleanExpression>
-    ) {
-        finished(expression, .notApplicable)
+        _ info: Void
+    ) -> Verdict {
+        .notApplicable
     }
     
     func visitNumberExpression(
         _ expression: NumberExpression,
-        _ finished: @escaping OnTransformEnd<NumberExpression>
-    ) {
-        finished(expression, .notApplicable)
+        _ info: Void
+    ) -> Verdict {
+        .notApplicable
     }
     
     func visitUnaryOperation(
         _ operation: UnaryOperation,
-        _ finished: @escaping OnTransformEnd<UnaryOperation>
-    ) {
-        finished(operation, .notApplicable)
+        _ info: Void
+    ) -> Verdict {
+        .notApplicable
     }
     
     func visitBinaryOperation(
         _ operation: BinaryOperation,
-        _ finished: @escaping OnTransformEnd<BinaryOperation>
-    ) {
-        finished(operation, .notApplicable)
+        _ info: Void
+    ) -> Verdict {
+        .notApplicable
     }
     
     func visitLetDefinition(
         _ definition: LetDefinition,
-        _ finished: @escaping OnTransformEnd<LetDefinition>
-    ) {
-        finished(definition, .no)
+        _ info: Void
+    ) -> Verdict {
+        .no
     }
     
     func visitVarDefinition(
         _ definition: VarDefinition,
-        _ finished: @escaping OnTransformEnd<VarDefinition>
-    ) {
-        finished(definition, .no)
+        _ info: Void
+    ) -> Verdict {
+        .no
     }
     
     func visitFuncDefinition(
         _ definition: FuncDefinition,
-        _ finished: @escaping OnTransformEnd<FuncDefinition>
-    ) {
-        finished(definition, .yes)
+        _ info: Void
+    ) -> Verdict {
+        .yes
     }
     
     func visitFuncApplication(
         _ expression: FuncApplication,
-        _ finished: @escaping OnTransformEnd<FuncApplication>
-    ) {
-        finished(expression, .notApplicable)
+        _ info: Void
+    ) -> Verdict {
+        .notApplicable
     }
     
     func visitIfStatement(
         _ statement: IfStatement,
-        _ finished: @escaping OnTransformEnd<IfStatement>
-    ) {
-        finished(statement, .notApplicable)
+        _ info: Void
+    ) -> Verdict {
+        .notApplicable
     }
     
     func visitReturnStatement(
         _ statement: ReturnStatement,
-        _ finished: @escaping OnTransformEnd<ReturnStatement>
-    ) {
-        finished(statement, .notApplicable)
+        _ info: Void
+    ) -> Verdict {
+        .notApplicable
     }
     
-    func visitAssignmentStatement(_ statement: AssignmentStatement, _ finished: @escaping OnTransformEnd<AssignmentStatement>) {
-        finished(statement, .yes)
+    func visitAssignmentStatement(
+        _ statement: AssignmentStatement,
+        _ info: Void
+    ) -> Verdict {
+        .yes
     }
 }
 
-class SymbolGrabber: ASTUpwardTransformer {
-    
+class SymbolGrabber: ASTVisitor {
     
     typealias Binding = String
-    
-    typealias TransformerInfo = [Binding]
+    typealias VisitorInfo = Void
+    typealias VisitorResult = [Binding]
     
     static var shared: SymbolGrabber {
         SymbolGrabber()
@@ -118,91 +120,91 @@ class SymbolGrabber: ASTUpwardTransformer {
     
     func visitIdentifierExpression(
         _ expression: IdentifierExpression,
-        _ finished: @escaping OnTransformEnd<IdentifierExpression>
-    ) {
-        finished(expression, [])
+        _ info: Void
+    ) -> [Binding] {
+        return []
     }
     
     func visitBooleanExpression(
         _ expression: BooleanExpression,
-        _ finished: @escaping OnTransformEnd<BooleanExpression>
-    ) {
-        finished(expression, [])
+        _ info: Void
+    ) -> [Binding] {
+        return []
     }
     
     func visitNumberExpression(
         _ expression: NumberExpression,
-        _ finished: @escaping OnTransformEnd<NumberExpression>
-    ) {
-        finished(expression, [])
+        _ info: Void
+    ) -> [Binding] {
+        return []
     }
     
     func visitUnaryOperation(
         _ operation: UnaryOperation,
-        _ finished: @escaping OnTransformEnd<UnaryOperation>
-    ) {
-        finished(operation, [])
+        _ info: Void
+    ) -> [Binding] {
+        return []
     }
     
     func visitBinaryOperation(
         _ operation: BinaryOperation,
-        _ finished: @escaping OnTransformEnd<BinaryOperation>
-    ) {
-        finished(operation, [])
+        _ info: Void
+    ) -> [Binding] {
+        return []
     }
     
     func visitLetDefinition(
         _ definition: LetDefinition,
-        _ finished: @escaping OnTransformEnd<LetDefinition>
-    ) {
-        finished(definition, [definition.name])
+        _ info: Void
+    ) -> [Binding] {
+        return [definition.name]
     }
     
     func visitVarDefinition(
         _ definition: VarDefinition,
-        _ finished: @escaping OnTransformEnd<VarDefinition>
-    ) {
-        finished(definition, [definition.name])
+        _ info: Void
+    ) -> [Binding] {
+        return [definition.name]
     }
     
     func visitFuncDefinition(
         _ definition: FuncDefinition,
-        _ finished: @escaping OnTransformEnd<FuncDefinition>
-    ) {
-        finished(definition, [definition.name])
+        _ info: Void
+    ) -> [Binding] {
+        return [definition.name]
     }
     
     func visitFuncApplication(
         _ expression: FuncApplication,
-        _ finished: @escaping OnTransformEnd<FuncApplication>
-    ) {
-        finished(expression, [])
+        _ info: Void
+    ) -> [Binding] {
+        return []
     }
     
     func visitIfStatement(
         _ statement: IfStatement,
-        _ finished: @escaping OnTransformEnd<IfStatement>
-    ) {
-        finished(statement, [])
+        _ info: Void
+    ) -> [Binding] {
+        return []
     }
     
     func visitReturnStatement(
         _ statement: ReturnStatement,
-        _ finished: @escaping OnTransformEnd<ReturnStatement>
-    ) {
-        finished(statement, [])
+        _ info: Void
+    ) -> [Binding] {
+        return []
     }
     
     func visitAssignmentStatement(
         _ statement: AssignmentStatement,
-        _ finished: @escaping OnTransformEnd<AssignmentStatement>
-    ) {
-        finished(statement, [])
+        _ info: Void
+    ) -> [Binding] {
+        return []
     }
     
 }
 
-class SymbolResolve: SemaPass, ASTDownwardTransformer {
+class SymbolResolve: SemaPass, ASTVisitor {
     
     typealias BindingInScope = String
     let context: ASTContext
@@ -218,25 +220,19 @@ class SymbolResolve: SemaPass, ASTDownwardTransformer {
         let tree = context.tree
         
         tree.sections.forEach { node in
-            var canBeRecursive: AllowsRecursiveDefinition.Verdict? = nil
-            node.acceptUpwardTransformer(AllowsRecursiveDefinition.shared) { _, verdict in
-                canBeRecursive = verdict
-            }
+            let canBeRecursive = node.acceptVisitor(AllowsRecursiveDefinition.shared)
             
             var exclude: String? = nil
             switch canBeRecursive {
             case .no:
-                node.acceptUpwardTransformer(SymbolGrabber.shared) { _, binding in
-                    exclude = binding.first
-                }
+                let result = node.acceptVisitor(SymbolGrabber.shared)
+                exclude = result.first
             case .yes, .notApplicable:
                 break
-            case nil:
-                fatalError("Not possible")
             }
             
             let globals = context.getGlobalSymbols(excluding: exclude)
-            node.acceptDownwardTransformer(self, globals)
+            node.acceptVisitor(self, globals)
         }
     }
     
@@ -273,15 +269,15 @@ class SymbolResolve: SemaPass, ASTDownwardTransformer {
         _ operation: UnaryOperation,
         _ info: [BindingInScope]
     ) {
-        operation.expression.acceptDownwardTransformer(self, info)
+        operation.expression.acceptVisitor(self, info)
     }
     
     func visitBinaryOperation(
         _ operation: BinaryOperation,
         _ info: [BindingInScope]
     ) {
-        operation.lhs.acceptDownwardTransformer(self, info)
-        operation.rhs.acceptDownwardTransformer(self, info)
+        operation.lhs.acceptVisitor(self, info)
+        operation.rhs.acceptVisitor(self, info)
     }
     
     func visitLetDefinition(
@@ -289,7 +285,7 @@ class SymbolResolve: SemaPass, ASTDownwardTransformer {
         _ info: [BindingInScope]
     ) {
         enforceNoShadowing(for: definition.name, scope: info)
-        definition.expression.acceptDownwardTransformer(self, info)
+        definition.expression.acceptVisitor(self, info)
     }
     
     func visitVarDefinition(
@@ -297,7 +293,7 @@ class SymbolResolve: SemaPass, ASTDownwardTransformer {
         _ info: [BindingInScope]
     ) {
         enforceNoShadowing(for: definition.name, scope: info)
-        definition.expression.acceptDownwardTransformer(self, info)
+        definition.expression.acceptVisitor(self, info)
     }
     
     func visitFuncDefinition(
@@ -343,14 +339,14 @@ class SymbolResolve: SemaPass, ASTDownwardTransformer {
             addError(.functionNotFound(name: expression.name), at: .beginningOfFile)
         }
         
-        expression.arguments.forEach { $0.acceptDownwardTransformer(self, info) }
+        expression.arguments.forEach { $0.acceptVisitor(self, info) }
     }
     
     func visitIfStatement(
         _ statement: IfStatement,
         _ info: [BindingInScope]
     ) {
-        statement.condition.acceptDownwardTransformer(self, info)
+        statement.condition.acceptVisitor(self, info)
         processBlock(statement.thenBranch, info)
         if let elseBranch = statement.elseBranch {
             processBlock(elseBranch, info)
@@ -361,7 +357,7 @@ class SymbolResolve: SemaPass, ASTDownwardTransformer {
         _ statement: ReturnStatement,
         _ info: [BindingInScope]
     ) {
-        statement.expression.acceptDownwardTransformer(self, info)
+        statement.expression.acceptVisitor(self, info)
     }
     
     func visitAssignmentStatement(
@@ -372,19 +368,18 @@ class SymbolResolve: SemaPass, ASTDownwardTransformer {
             addError(.identifierUnbound(name: statement.name), at: .beginningOfFile)
         }
         
-        statement.expression.acceptDownwardTransformer(self, info)
+        statement.expression.acceptVisitor(self, info)
     }
     
     private func processBlock(
         _ block: [any BlockLevelNode],
-        _ info: TransformationInfo
+        _ info: [BindingInScope]
     ) {
         var mutInfo = info
         block.forEach { node in
-            node.acceptDownwardTransformer(self, mutInfo)
-            node.acceptUpwardTransformer(SymbolGrabber.shared) { _, bindings in
-                mutInfo.append(contentsOf: bindings)
-            }
+            node.acceptVisitor(self, mutInfo)
+            let bindings = node.acceptVisitor(SymbolGrabber.shared)
+            mutInfo.append(contentsOf: bindings)
         }
     }
     

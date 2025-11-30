@@ -15,11 +15,13 @@ protocol ASTNodeIncompletable {
 
 protocol ASTNode: Hashable, ASTNodeIncompletable {
     var id: UUID { get }
-    func acceptVisitor(_ visitor: any ASTVisitor)
-    
-    func acceptUpwardTransformer<T: ASTUpwardTransformer>(_ transformer: T, _ finished: @escaping T.OnTransformEnd<Self>)
-    
-    func acceptDownwardTransformer<T: ASTDownwardTransformer>(_ transformer: T, _ info: T.TransformationInfo)
+    func acceptVisitor<V: ASTVisitor>(_ visitor: V, _ info: V.VisitorInfo) -> V.VisitorResult
+}
+
+extension ASTNode {
+    func acceptVisitor<V: ASTVisitor>(_ visitor: V) -> V.VisitorResult where V.VisitorInfo == Void {
+        acceptVisitor(visitor, ())
+    }
 }
 
 extension ASTNode {
@@ -83,15 +85,19 @@ extension ASTNode {
     }
 }
 
-struct TopLevel {
+final class TopLevel {
     var sections: [any TopLevelNode]
+    
+    init(sections: [any TopLevelNode]) {
+        self.sections = sections
+    }
 }
 
 protocol BlockLevelNode: ASTNode {
     
 }
 
-struct BlockLevelNodeIncomplete: BlockLevelNode {
+final class BlockLevelNodeIncomplete: BlockLevelNode {
     let id = UUID()
     var isIncomplete: Bool
     
@@ -103,22 +109,14 @@ struct BlockLevelNodeIncomplete: BlockLevelNode {
         self.isIncomplete = true
     }
     
-    func acceptVisitor(_ visitor: any ASTVisitor) {
+    func acceptVisitor<V: ASTVisitor>(_ visitor: V, _ info: V.VisitorInfo) -> V.VisitorResult {
         fatalError("Attempted to visit incomplete block-level node")
-    }
-    
-    func acceptUpwardTransformer<T: ASTUpwardTransformer>(_ transformer: T, _ finished: T.OnTransformEnd<Self>) {
-        fatalError("Attempted to transform incomplete block-level node")
-    }
-    
-    func acceptDownwardTransformer<T: ASTDownwardTransformer>(_ transformer: T, _ info: T.TransformationInfo) {
-        fatalError("Attempted to transform incomplete block-level node")
     }
 }
 
 protocol TopLevelNode: BlockLevelNode { }
 
-struct TopLevelNodeIncomplete: TopLevelNode {
+final class TopLevelNodeIncomplete: TopLevelNode {
     let id = UUID()
     static var incomplete: TopLevelNodeIncomplete {
         TopLevelNodeIncomplete()
@@ -130,16 +128,8 @@ struct TopLevelNodeIncomplete: TopLevelNode {
     
     var isIncomplete: Bool
     
-    func acceptVisitor(_ visitor: any ASTVisitor) {
+    func acceptVisitor<V: ASTVisitor>(_ visitor: V, _ info: V.VisitorInfo) -> V.VisitorResult {
         fatalError("Attempted to visit incomplete top-level node")
-    }
-    
-    func acceptUpwardTransformer<T: ASTUpwardTransformer>(_ transformer: T, _ finished: T.OnTransformEnd<Self>) {
-        fatalError("Attempted to transform incomplete top-level node")
-    }
-    
-    func acceptDownwardTransformer<T: ASTDownwardTransformer>(_ transformer: T, _ info: T.TransformationInfo) {
-        fatalError("Attempted to transform incomplete top-level node")
     }
 }
 
@@ -161,7 +151,7 @@ protocol DefinitionNode: TopLevelNode {
 
 protocol StatementNode: BlockLevelNode { }
 
-struct IdentifierExpression: ExpressionNode, TopLevelNode {
+final class IdentifierExpression: ExpressionNode, TopLevelNode {
     let id = UUID()
     let name: String
     
@@ -181,30 +171,16 @@ struct IdentifierExpression: ExpressionNode, TopLevelNode {
         self.isIncomplete = false
     }
     
-    func acceptVisitor(_ visitor: any ASTVisitor) {
-        visitor.visitIdentifierExpression(self)
+    func acceptVisitor<V: ASTVisitor>(_ visitor: V, _ info: V.VisitorInfo) -> V.VisitorResult {
+        visitor.visitIdentifierExpression(self, info)
     }
     
     func acceptTypeQuery(_ context: ASTContext) {
         context.queryTypeOfIdentifierExpression(self)
     }
-    
-    func acceptUpwardTransformer<T: ASTUpwardTransformer>(
-        _ transformer: T,
-        _ finished: @escaping T.OnTransformEnd<IdentifierExpression>
-    ) {
-        transformer.visitIdentifierExpression(self, finished)
-    }
-    
-    func acceptDownwardTransformer<T: ASTDownwardTransformer>(
-        _ transformer: T,
-        _ info: T.TransformationInfo
-    ) {
-        transformer.visitIdentifierExpression(self, info)
-    }
 }
 
-struct BooleanExpression: ExpressionNode {
+final class BooleanExpression: ExpressionNode {
     let id = UUID()
     let value: Bool
     
@@ -224,30 +200,16 @@ struct BooleanExpression: ExpressionNode {
         self.isIncomplete = false
     }
     
-    func acceptVisitor(_ visitor: any ASTVisitor) {
-        visitor.visitBooleanExpression(self)
+    func acceptVisitor<V: ASTVisitor>(_ visitor: V, _ info: V.VisitorInfo) -> V.VisitorResult {
+        visitor.visitBooleanExpression(self, info)
     }
     
     func acceptTypeQuery(_ context: ASTContext) {
         context.queryTypeOfBooleanExpression(self)
     }
-    
-    func acceptUpwardTransformer<T: ASTUpwardTransformer>(
-        _ transformer: T,
-        _ finished: @escaping T.OnTransformEnd<BooleanExpression>
-    ) {
-        transformer.visitBooleanExpression(self, finished)
-    }
-    
-    func acceptDownwardTransformer<T: ASTDownwardTransformer>(
-        _ transformer: T,
-        _ info: T.TransformationInfo
-    ) {
-        transformer.visitBooleanExpression(self, info)
-    }
 }
 
-struct NumberExpression: ExpressionNode {
+final class NumberExpression: ExpressionNode {
     let id = UUID()
     let value: Int
     
@@ -267,30 +229,16 @@ struct NumberExpression: ExpressionNode {
         self.isIncomplete = false
     }
     
-    func acceptVisitor(_ visitor: any ASTVisitor) {
-        visitor.visitNumberExpression(self)
+    func acceptVisitor<V: ASTVisitor>(_ visitor: V, _ info: V.VisitorInfo) -> V.VisitorResult {
+        visitor.visitNumberExpression(self, info)
     }
     
     func acceptTypeQuery(_ context: ASTContext) {
         context.queryTypeOfNumberExpression(self)
     }
-    
-    func acceptUpwardTransformer<T: ASTUpwardTransformer>(
-        _ transformer: T,
-        _ finished: @escaping T.OnTransformEnd<NumberExpression>
-    ) {
-        transformer.visitNumberExpression(self, finished)
-    }
-    
-    func acceptDownwardTransformer<T: ASTDownwardTransformer>(
-        _ transformer: T,
-        _ info: T.TransformationInfo
-    ) {
-        transformer.visitNumberExpression(self, info)
-    }
 }
 
-struct UnaryOperation: ExpressionNode {
+final class UnaryOperation: ExpressionNode {
     let id = UUID()
     
     let op: Operator
@@ -318,30 +266,16 @@ struct UnaryOperation: ExpressionNode {
         self.isIncomplete = false
     }
     
-    func acceptVisitor(_ visitor: any ASTVisitor) {
-        visitor.visitUnaryOperation(self)
+    func acceptVisitor<V: ASTVisitor>(_ visitor: V, _ info: V.VisitorInfo) -> V.VisitorResult {
+        visitor.visitUnaryOperation(self, info)
     }
     
     func acceptTypeQuery(_ context: ASTContext) {
         context.queryTypeOfUnaryOperation(self)
     }
-    
-    func acceptUpwardTransformer<T: ASTUpwardTransformer>(
-        _ transformer: T,
-        _ finished: @escaping T.OnTransformEnd<UnaryOperation>
-    ) {
-        transformer.visitUnaryOperation(self, finished)
-    }
-    
-    func acceptDownwardTransformer<T: ASTDownwardTransformer>(
-        _ transformer: T,
-        _ info: T.TransformationInfo
-    ) {
-        transformer.visitUnaryOperation(self, info)
-    }
 }
 
-struct BinaryOperation: ExpressionNode {
+final class BinaryOperation: ExpressionNode {
     let id = UUID()
     let op: Operator
     enum Operator {
@@ -374,30 +308,16 @@ struct BinaryOperation: ExpressionNode {
         self.isIncomplete = false
     }
     
-    func acceptVisitor(_ visitor: any ASTVisitor) {
-        visitor.visitBinaryOperation(self)
+    func acceptVisitor<V: ASTVisitor>(_ visitor: V, _ info: V.VisitorInfo) -> V.VisitorResult {
+        visitor.visitBinaryOperation(self, info)
     }
     
     func acceptTypeQuery(_ context: ASTContext) {
         context.queryTypeOfBinaryOperation(self)
     }
-    
-    func acceptUpwardTransformer<T: ASTUpwardTransformer>(
-        _ transformer: T,
-        _ finished: @escaping T.OnTransformEnd<BinaryOperation>
-    ) {
-        transformer.visitBinaryOperation(self, finished)
-    }
-    
-    func acceptDownwardTransformer<T: ASTDownwardTransformer>(
-        _ transformer: T,
-        _ info: T.TransformationInfo
-    ) {
-        transformer.visitBinaryOperation(self, info)
-    }
 }
 
-struct LetDefinition: DefinitionNode  {
+final class LetDefinition: DefinitionNode  {
     let id = UUID()
     let name: String
     let type: TypeName?
@@ -423,26 +343,12 @@ struct LetDefinition: DefinitionNode  {
         self.isIncomplete = false
     }
     
-    func acceptVisitor(_ visitor: any ASTVisitor) {
-        visitor.visitLetDefinition(self)
-    }
-    
-    func acceptUpwardTransformer<T: ASTUpwardTransformer>(
-        _ transformer: T,
-        _ finished: @escaping T.OnTransformEnd<LetDefinition>
-    ) {
-        transformer.visitLetDefinition(self, finished)
-    }
-    
-    func acceptDownwardTransformer<T: ASTDownwardTransformer>(
-        _ transformer: T,
-        _ info: T.TransformationInfo
-    ) {
-        transformer.visitLetDefinition(self, info)
+    func acceptVisitor<V: ASTVisitor>(_ visitor: V, _ info: V.VisitorInfo) -> V.VisitorResult {
+        visitor.visitLetDefinition(self, info)
     }
 }
 
-struct VarDefinition: DefinitionNode {
+final class VarDefinition: DefinitionNode {
     let id = UUID()
     let name: String
     let type: TypeName?
@@ -468,22 +374,8 @@ struct VarDefinition: DefinitionNode {
         self.isIncomplete = false
     }
     
-    func acceptVisitor(_ visitor: any ASTVisitor) {
-        visitor.visitVarDefinition(self)
-    }
-    
-    func acceptUpwardTransformer<T: ASTUpwardTransformer>(
-        _ transformer: T,
-        _ finished: @escaping T.OnTransformEnd<VarDefinition>
-    ) {
-        transformer.visitVarDefinition(self, finished)
-    }
-    
-    func acceptDownwardTransformer<T: ASTDownwardTransformer>(
-        _ transformer: T,
-        _ info: T.TransformationInfo
-    ) {
-        transformer.visitVarDefinition(self, info)
+    func acceptVisitor<V: ASTVisitor>(_ visitor: V, _ info: V.VisitorInfo) -> V.VisitorResult {
+        visitor.visitVarDefinition(self, info)
     }
 }
 
@@ -509,7 +401,7 @@ enum TypeName: Equatable {
     }
 }
 
-struct FuncDefinition: TopLevelNode {
+final class FuncDefinition: TopLevelNode {
     
     struct Parameter {
         let name: String
@@ -560,26 +452,12 @@ struct FuncDefinition: TopLevelNode {
         self.isIncomplete = false
     }
     
-    func acceptVisitor(_ visitor: any ASTVisitor) {
-        visitor.visitFuncDefinition(self)
-    }
-    
-    func acceptUpwardTransformer<T: ASTUpwardTransformer>(
-        _ transformer: T,
-        _ finished: @escaping T.OnTransformEnd<FuncDefinition>
-    ) {
-        transformer.visitFuncDefinition(self, finished)
-    }
-    
-    func acceptDownwardTransformer<T: ASTDownwardTransformer>(
-        _ transformer: T,
-        _ info: T.TransformationInfo
-    ) {
-        transformer.visitFuncDefinition(self, info)
+    func acceptVisitor<V: ASTVisitor>(_ visitor: V, _ info: V.VisitorInfo) -> V.VisitorResult {
+        visitor.visitFuncDefinition(self, info)
     }
 }
 
-struct FuncApplication: ExpressionNode, TopLevelNode {
+final class FuncApplication: ExpressionNode, TopLevelNode {
     let id = UUID()
     let name: String
     let arguments: [any ExpressionNode]
@@ -602,30 +480,16 @@ struct FuncApplication: ExpressionNode, TopLevelNode {
         self.isIncomplete = false
     }
     
-    func acceptVisitor(_ visitor: any ASTVisitor) {
-        visitor.visitFuncApplication(self)
+    func acceptVisitor<V: ASTVisitor>(_ visitor: V, _ info: V.VisitorInfo) -> V.VisitorResult {
+        visitor.visitFuncApplication(self, info)
     }
     
     func acceptTypeQuery(_ context: ASTContext) {
         context.queryTypeOfFuncApplication(self)
     }
-    
-    func acceptUpwardTransformer<T: ASTUpwardTransformer>(
-        _ transformer: T,
-        _ finished: @escaping T.OnTransformEnd<FuncApplication>
-    ) {
-        transformer.visitFuncApplication(self, finished)
-    }
-    
-    func acceptDownwardTransformer<T: ASTDownwardTransformer>(
-        _ transformer: T,
-        _ info: T.TransformationInfo
-    ) {
-        transformer.visitFuncApplication(self, info)
-    }
 }
 
-struct IfStatement: StatementNode, BlockLevelNode {
+final class IfStatement: StatementNode, BlockLevelNode {
     let id = UUID()
     let condition: any ExpressionNode
     let thenBranch: [any BlockLevelNode]
@@ -651,26 +515,12 @@ struct IfStatement: StatementNode, BlockLevelNode {
         self.isIncomplete = false
     }
     
-    func acceptVisitor(_ visitor: any ASTVisitor) {
-        visitor.visitIfStatement(self)
-    }
-    
-    func acceptUpwardTransformer<T: ASTUpwardTransformer>(
-        _ transformer: T,
-        _ finished: @escaping T.OnTransformEnd<IfStatement>
-    ) {
-        transformer.visitIfStatement(self, finished)
-    }
-    
-    func acceptDownwardTransformer<T: ASTDownwardTransformer>(
-        _ transformer: T,
-        _ info: T.TransformationInfo
-    ) {
-        transformer.visitIfStatement(self, info)
+    func acceptVisitor<V: ASTVisitor>(_ visitor: V, _ info: V.VisitorInfo) -> V.VisitorResult {
+        visitor.visitIfStatement(self, info)
     }
 }
 
-struct ReturnStatement: StatementNode, BlockLevelNode {
+final class ReturnStatement: StatementNode, BlockLevelNode {
     let id = UUID()
     let expression: any ExpressionNode
     
@@ -689,26 +539,12 @@ struct ReturnStatement: StatementNode, BlockLevelNode {
         self.isIncomplete = false
     }
     
-    func acceptVisitor(_ visitor: any ASTVisitor) {
-        visitor.visitReturnStatement(self)
-    }
-    
-    func acceptUpwardTransformer<T: ASTUpwardTransformer>(
-        _ transformer: T,
-        _ finished: @escaping T.OnTransformEnd<ReturnStatement>
-    ) {
-        transformer.visitReturnStatement(self, finished)
-    }
-    
-    func acceptDownwardTransformer<T: ASTDownwardTransformer>(
-        _ transformer: T,
-        _ info: T.TransformationInfo
-    ) {
-        transformer.visitReturnStatement(self, info)
+    func acceptVisitor<V: ASTVisitor>(_ visitor: V, _ info: V.VisitorInfo) -> V.VisitorResult {
+        visitor.visitReturnStatement(self, info)
     }
 }
 
-struct AssignmentStatement: StatementNode, TopLevelNode {
+final class AssignmentStatement: StatementNode, TopLevelNode {
     let id = UUID()
     let name: String
     let expression: any ExpressionNode
@@ -730,16 +566,8 @@ struct AssignmentStatement: StatementNode, TopLevelNode {
         self.isIncomplete = true
     }
     
-    func acceptVisitor(_ visitor: any ASTVisitor) {
-        visitor.visitAssignmentStatement(self)
-    }
-    
-    func acceptUpwardTransformer<T>(_ transformer: T, _ finished: @escaping T.OnTransformEnd<AssignmentStatement>) where T : ASTUpwardTransformer {
-        transformer.visitAssignmentStatement(self, finished)
-    }
-    
-    func acceptDownwardTransformer<T>(_ transformer: T, _ info: T.TransformationInfo) where T : ASTDownwardTransformer {
-        transformer.visitAssignmentStatement(self, info)
+    func acceptVisitor<V: ASTVisitor>(_ visitor: V, _ info: V.VisitorInfo) -> V.VisitorResult {
+        visitor.visitAssignmentStatement(self, info)
     }
     
 }
