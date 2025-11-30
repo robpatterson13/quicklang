@@ -237,3 +237,9 @@ class DefaultRecovery: RecoveryEngine {
         }
     }
 }
+
+class NoRecovery: RecoveryEngine {
+    func recover(from error: ParserErrorType) -> RecoveryStrategy {
+        .unrecoverable
+    }
+}

@@ -153,8 +153,8 @@ final class Parser: CompilerPhase {
     ///
     /// - Note: This is a hard failure and will crash. Use sparingly and only for
     ///   invariant violations or exhausted recovery options.
-    private func handleUnrecoverable() -> Never {
-        fatalError()
+    private func handleUnrecoverable() {
+        tokens.moveToEnd()
     }
     
     /// Applies a recovery strategy to advance the parser to a stable state.

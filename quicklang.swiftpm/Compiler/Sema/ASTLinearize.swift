@@ -260,7 +260,24 @@ class ASTLinearize: SemaPass, ASTUpwardTransformer {
         _ statement: AssignmentStatement,
         _ finished: @escaping OnTransformEnd<AssignmentStatement>
     ) {
-        // MARK: NOT DONE
+        var newBindings: [any DefinitionNode] = []
+        var newBoundExpr: (any ExpressionNode)? = nil
+        statement.expression.acceptUpwardTransformer(self) { newExpression, info in
+            let (id, bindings) = info
+            
+            if let id {
+                newBoundExpr = id
+            } else {
+                newBoundExpr = newExpression
+            }
+            
+            newBindings.append(contentsOf: bindings)
+        }
+        
+        let newType = context.getType(of: newBoundExpr!)
+        let newStatement = AssignmentStatement(name: statement.name, expression: newBoundExpr!)
+        finished(newStatement, (nil, newBindings))
+
     }
     
     private func linearizeBlock(_ block: [any BlockLevelNode]) -> [any BlockLevelNode] {

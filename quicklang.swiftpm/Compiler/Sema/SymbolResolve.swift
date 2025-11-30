@@ -99,34 +99,15 @@ class AllowsRecursiveDefinition: ASTUpwardTransformer {
     }
     
     func visitAssignmentStatement(_ statement: AssignmentStatement, _ finished: @escaping OnTransformEnd<AssignmentStatement>) {
-        // MARK: NOT DONE
+        finished(statement, .yes)
     }
 }
 
-/// Collects names introduced by AST nodes during an upward (child → parent) traversal.
-///
-/// ``SymbolGrabber`` is an implementation of ``ASTUpwardTransformer`` that does not
-/// rewrite nodes. Instead, it reports which bindings a node introduces to its
-/// enclosing scope. ``SymbolResolve`` uses this information to implement progressive
-/// block scoping:
-///
-/// - After validating a statement against the current scope (downward traversal),
-///   the resolver asks ``SymbolGrabber`` which names that statement declares (upward traversal).
-/// - The resolver then extends the scope so subsequent statements in the same block
-///   can see those names.
-///
-/// - Important: This transformer only reports bindings; it does not model visibility
-///   across sibling branches of control flow. Branch-local bindings are handled by
-///   the block-processing logic in ``SymbolResolve``.
-///
-/// - Returns: For declaration nodes, an array containing the declared name; for all
-///   other nodes, an empty array.
 class SymbolGrabber: ASTUpwardTransformer {
     
-    /// A single binding introduced into the surrounding scope (variable or function name).
+    
     typealias Binding = String
     
-    /// The upward payload returned to parents: a list of introduced binding names.
     typealias TransformerInfo = [Binding]
     
     static var shared: SymbolGrabber {
@@ -135,12 +116,6 @@ class SymbolGrabber: ASTUpwardTransformer {
     
     private init() {}
     
-    /// Identifiers do not introduce new bindings.
-    ///
-    /// - Parameters:
-    ///   - expression: The identifier expression being visited.
-    ///   - finished: The upward-only completion callback that must be invoked with the
-    ///     original node and the empty binding list.
     func visitIdentifierExpression(
         _ expression: IdentifierExpression,
         _ finished: @escaping OnTransformEnd<IdentifierExpression>
@@ -148,12 +123,6 @@ class SymbolGrabber: ASTUpwardTransformer {
         finished(expression, [])
     }
     
-    /// Boolean literals do not introduce new bindings.
-    ///
-    /// - Parameters:
-    ///   - expression: The boolean literal being visited.
-    ///   - finished: The upward-only completion callback that must be invoked with the
-    ///     original node and the empty binding list.
     func visitBooleanExpression(
         _ expression: BooleanExpression,
         _ finished: @escaping OnTransformEnd<BooleanExpression>
@@ -161,12 +130,6 @@ class SymbolGrabber: ASTUpwardTransformer {
         finished(expression, [])
     }
     
-    /// Number literals do not introduce new bindings.
-    ///
-    /// - Parameters:
-    ///   - expression: The number literal being visited.
-    ///   - finished: The upward-only completion callback that must be invoked with the
-    ///     original node and the empty binding list.
     func visitNumberExpression(
         _ expression: NumberExpression,
         _ finished: @escaping OnTransformEnd<NumberExpression>
@@ -174,12 +137,6 @@ class SymbolGrabber: ASTUpwardTransformer {
         finished(expression, [])
     }
     
-    /// Unary operations do not introduce new bindings.
-    ///
-    /// - Parameters:
-    ///   - operation: The unary operation being visited.
-    ///   - finished: The upward-only completion callback that must be invoked with the
-    ///     original node and the empty binding list.
     func visitUnaryOperation(
         _ operation: UnaryOperation,
         _ finished: @escaping OnTransformEnd<UnaryOperation>
@@ -187,12 +144,6 @@ class SymbolGrabber: ASTUpwardTransformer {
         finished(operation, [])
     }
     
-    /// Binary operations do not introduce new bindings.
-    ///
-    /// - Parameters:
-    ///   - operation: The binary operation being visited.
-    ///   - finished: The upward-only completion callback that must be invoked with the
-    ///     original node and the empty binding list.
     func visitBinaryOperation(
         _ operation: BinaryOperation,
         _ finished: @escaping OnTransformEnd<BinaryOperation>
@@ -200,13 +151,6 @@ class SymbolGrabber: ASTUpwardTransformer {
         finished(operation, [])
     }
     
-    /// A `let` definition introduces an immutable binding for its name.
-    ///
-    /// - Parameters:
-    ///   - definition: The ``LetDefinition`` being visited.
-    ///   - finished: The upward-only completion callback with the original node and
-    ///     `[definition.name]`.
-    /// - Returns: `[definition.name]`.
     func visitLetDefinition(
         _ definition: LetDefinition,
         _ finished: @escaping OnTransformEnd<LetDefinition>
@@ -214,13 +158,6 @@ class SymbolGrabber: ASTUpwardTransformer {
         finished(definition, [definition.name])
     }
     
-    /// A `var` definition introduces a mutable binding for its name.
-    ///
-    /// - Parameters:
-    ///   - definition: The ``VarDefinition`` being visited.
-    ///   - finished: The upward-only completion callback with the original node and
-    ///     `[definition.name]`.
-    /// - Returns: `[definition.name]`.
     func visitVarDefinition(
         _ definition: VarDefinition,
         _ finished: @escaping OnTransformEnd<VarDefinition>
@@ -228,16 +165,6 @@ class SymbolGrabber: ASTUpwardTransformer {
         finished(definition, [definition.name])
     }
     
-    /// A function definition introduces a binding for the function name in the enclosing scope.
-    ///
-    /// This allows the function to be referenced by name in subsequent statements in the
-    /// same block and enables recursion (when combined with the resolver’s body analysis).
-    ///
-    /// - Parameters:
-    ///   - definition: The ``FuncDefinition`` being visited.
-    ///   - finished: The upward-only completion callback with the original node and
-    ///     `[definition.name]`.
-    /// - Returns: `[definition.name]`.
     func visitFuncDefinition(
         _ definition: FuncDefinition,
         _ finished: @escaping OnTransformEnd<FuncDefinition>
@@ -245,11 +172,6 @@ class SymbolGrabber: ASTUpwardTransformer {
         finished(definition, [definition.name])
     }
     
-    /// Function applications do not introduce new bindings.
-    ///
-    /// - Parameters:
-    ///   - expression: The ``FuncApplication`` being visited.
-    ///   - finished: The upward-only completion callback with the original node and `[]`.
     func visitFuncApplication(
         _ expression: FuncApplication,
         _ finished: @escaping OnTransformEnd<FuncApplication>
@@ -257,14 +179,6 @@ class SymbolGrabber: ASTUpwardTransformer {
         finished(expression, [])
     }
     
-    /// If statements do not introduce bindings at the statement boundary.
-    ///
-    /// - Important: Any bindings created inside branches are local to those branches and
-    ///   are handled by block processing, not by this grabber directly.
-    ///
-    /// - Parameters:
-    ///   - statement: The ``IfStatement`` being visited.
-    ///   - finished: The upward-only completion callback with the original node and `[]`.
     func visitIfStatement(
         _ statement: IfStatement,
         _ finished: @escaping OnTransformEnd<IfStatement>
@@ -272,11 +186,6 @@ class SymbolGrabber: ASTUpwardTransformer {
         finished(statement, [])
     }
     
-    /// Return statements do not introduce new bindings.
-    ///
-    /// - Parameters:
-    ///   - statement: The ``ReturnStatement`` being visited.
-    ///   - finished: The upward-only completion callback with the original node and `[]`.
     func visitReturnStatement(
         _ statement: ReturnStatement,
         _ finished: @escaping OnTransformEnd<ReturnStatement>
@@ -284,39 +193,28 @@ class SymbolGrabber: ASTUpwardTransformer {
         finished(statement, [])
     }
     
-    func visitAssignmentStatement(_ statement: AssignmentStatement, _ finished: @escaping OnTransformEnd<AssignmentStatement>) {
-        // MARK: NOT DONE
+    func visitAssignmentStatement(
+        _ statement: AssignmentStatement,
+        _ finished: @escaping OnTransformEnd<AssignmentStatement>
+    ) {
+        finished(statement, [])
     }
     
 }
 
-/// Performs symbol resolution with progressive block-level scoping using a downward (parent → child) traversal.
-///
-/// ``SymbolResolve`` implements ``ASTDownwardTransformer`` and validates name usage by
-/// threading a scope (an ordered list of visible names) down the AST:
-///
-/// - References (``IdentifierExpression`` and ``FuncApplication``) are checked against the current scope.
-/// - Within a block, each statement is analyzed with the scope produced by all prior statements.
-/// - Function bodies are analyzed in a scope extended with the function’s own name (to enable recursion)
-///   and all parameter names.
-/// - Branch-local bindings in ``IfStatement`` do not leak between branches or to the outer scope.
-///
-/// Implementation details:
-/// - Downward validation: each node is visited with the current scope.
-/// - Progressive scoping: after each block-level node, an upward pass using ``SymbolGrabber``
-///   discovers newly introduced names, which are appended to the scope for subsequent nodes.
-///
-/// - Note: Diagnostics emission is stubbed out in this file and can be integrated with
-///   ``CompilerErrorManager`` as needed.
 class SymbolResolve: SemaPass, ASTDownwardTransformer {
     
-    /// Entry point for this semantic pass.
-    ///
-    /// Implementations should traverse the program and report diagnostics to the provided
-    /// ``CompilerErrorManager``. This stub ensures conformance to ``SemaPass``.
-    ///
-    /// - Parameter reportingTo: The compiler’s error manager used to record diagnostics.
+    typealias BindingInScope = String
+    let context: ASTContext
+    var errorManager: CompilerErrorManager?
+    
+    init(context: ASTContext) {
+        self.context = context
+    }
+    
     func begin(reportingTo: CompilerErrorManager) {
+        errorManager = reportingTo
+        
         let tree = context.tree
         
         tree.sections.forEach { node in
@@ -342,47 +240,21 @@ class SymbolResolve: SemaPass, ASTDownwardTransformer {
         }
     }
     
-    /// A single binding name currently visible at a program point.
-    ///
-    /// Bindings are tracked as simple strings (variable and function names).
-    typealias BindingInScope = String
-    
-    /// Shared semantic context (types, symbol metadata, etc.).
-    ///
-    /// Currently unused by this pass but available for integration with other phases.
-    let context: ASTContext
-    
-    /// Creates a symbol resolver bound to the shared semantic context.
-    ///
-    /// - Parameter context: The shared ``ASTContext`` for semantic analysis.
-    init(context: ASTContext) {
-        self.context = context
+    private func addError(_ error: SymbolResolveErrorType, at location: SourceCodeLocation) {
+        let errorInfo = error.buildInfo(at: location)
+        let error = errorInfo.getError(from: DefaultSymbolResolveErrorCreator.shared)
+        errorManager?.addError(error)
     }
     
-    // MARK: - Expressions
-    
-    /// Validates that an identifier reference is bound in the current scope.
-    ///
-    /// - Parameters:
-    ///   - expression: The ``IdentifierExpression`` being visited.
-    ///   - info: The current scope as an ordered list of visible names.
-    /// - Important: If the identifier is not found, a diagnostic should be recorded via
-    ///   ``CompilerErrorManager`` (not implemented here).
     func visitIdentifierExpression(
         _ expression: IdentifierExpression,
         _ info: [BindingInScope]
     ) {
         if !info.contains(where: { $0 == expression.name }) {
-            // MARK: Unbound
-            // Intention: record or emit a diagnostic for an unbound identifier.
+            addError(.identifierUnbound(name: expression.name), at: .beginningOfFile)
         }
     }
     
-    /// Boolean literals require no symbol validation.
-    ///
-    /// - Parameters:
-    ///   - expression: The ``BooleanExpression`` being visited.
-    ///   - info: The current scope (unused).
     func visitBooleanExpression(
         _ expression: BooleanExpression,
         _ info: [BindingInScope]
@@ -390,11 +262,6 @@ class SymbolResolve: SemaPass, ASTDownwardTransformer {
         // no-op
     }
     
-    /// Number literals require no symbol validation.
-    ///
-    /// - Parameters:
-    ///   - expression: The ``NumberExpression`` being visited.
-    ///   - info: The current scope (unused).
     func visitNumberExpression(
         _ expression: NumberExpression,
         _ info: [BindingInScope]
@@ -402,11 +269,6 @@ class SymbolResolve: SemaPass, ASTDownwardTransformer {
         // no-op
     }
     
-    /// Validates a unary operation by resolving its operand under the current scope.
-    ///
-    /// - Parameters:
-    ///   - operation: The ``UnaryOperation`` being visited.
-    ///   - info: The current scope.
     func visitUnaryOperation(
         _ operation: UnaryOperation,
         _ info: [BindingInScope]
@@ -414,11 +276,6 @@ class SymbolResolve: SemaPass, ASTDownwardTransformer {
         operation.expression.acceptDownwardTransformer(self, info)
     }
     
-    /// Validates a binary operation by resolving both operands under the current scope.
-    ///
-    /// - Parameters:
-    ///   - operation: The ``BinaryOperation`` being visited.
-    ///   - info: The current scope.
     func visitBinaryOperation(
         _ operation: BinaryOperation,
         _ info: [BindingInScope]
@@ -427,16 +284,6 @@ class SymbolResolve: SemaPass, ASTDownwardTransformer {
         operation.rhs.acceptDownwardTransformer(self, info)
     }
     
-    // MARK: - Definitions
-    
-    /// Checks a `let` definition for shadowing and validates its initializer under the current scope.
-    ///
-    /// The new binding becomes visible to subsequent statements in the same block via
-    /// progressive scoping (see ``processBlock(_:_: )``).
-    ///
-    /// - Parameters:
-    ///   - definition: The ``LetDefinition`` being visited.
-    ///   - info: The current scope.
     func visitLetDefinition(
         _ definition: LetDefinition,
         _ info: [BindingInScope]
@@ -445,14 +292,6 @@ class SymbolResolve: SemaPass, ASTDownwardTransformer {
         definition.expression.acceptDownwardTransformer(self, info)
     }
     
-    /// Checks a `var` definition for shadowing and validates its initializer under the current scope.
-    ///
-    /// The new binding becomes visible to subsequent statements in the same block via
-    /// progressive scoping (see ``processBlock(_:_: )``).
-    ///
-    /// - Parameters:
-    ///   - definition: The ``VarDefinition`` being visited.
-    ///   - info: The current scope.
     func visitVarDefinition(
         _ definition: VarDefinition,
         _ info: [BindingInScope]
@@ -461,17 +300,6 @@ class SymbolResolve: SemaPass, ASTDownwardTransformer {
         definition.expression.acceptDownwardTransformer(self, info)
     }
     
-    /// Analyzes a function definition with a scope extended by the function name and its parameters.
-    ///
-    /// Steps:
-    /// 1. Disallow shadowing of the function name and parameter names.
-    /// 2. Enforce unique parameter names.
-    /// 3. Analyze the body using a scope that includes the function’s own name (enables recursion)
-    ///    and all parameter names.
-    ///
-    /// - Parameters:
-    ///   - definition: The ``FuncDefinition`` being visited.
-    ///   - info: The incoming scope.
     func visitFuncDefinition(
         _ definition: FuncDefinition,
         _ info: [BindingInScope]
@@ -490,59 +318,34 @@ class SymbolResolve: SemaPass, ASTDownwardTransformer {
         processBlock(definition.body, newInfo)
     }
     
-    /// Ensures parameter names are unique within the function’s parameter list.
-    ///
-    /// - Parameter params: The parameter list from a ``FuncDefinition``.
-    /// - Important: Duplicate parameter names would be ambiguous when referenced inside the body.
     private func enforceUniqueParameterNames(_ params: [FuncDefinition.Parameter]) {
         let paramNames = params.map { $0.name }
         let paramSet = Set(arrayLiteral: paramNames)
         
         guard paramSet.count == paramNames.count else {
-            // MARK: Param names must be unique
+            addError(.parameterNamesNotUnique(repeated: "you gotta do this one"), at: .beginningOfFile)
             return
         }
     }
     
-    /// Disallows declaring a binding that is already visible in the current scope.
-    ///
-    /// - Parameters:
-    ///   - binding: The name being introduced.
-    ///   - scope: The current list of visible names.
-    /// - Important: Shadowing makes references ambiguous and is rejected by this pass.
     private func enforceNoShadowing(for binding: String, scope: [BindingInScope]) {
         guard !scope.contains(binding) else {
-            // MARK: Shadowing not allowed
+            addError(.shadowing(name: binding), at: .beginningOfFile)
             return
         }
     }
     
-    // MARK: - Applications and Control Flow
-    
-    /// Validates a function application by checking the callee is bound and resolving all arguments.
-    ///
-    /// - Parameters:
-    ///   - expression: The ``FuncApplication`` being visited.
-    ///   - info: The current scope.
     func visitFuncApplication(
         _ expression: FuncApplication,
         _ info: [BindingInScope]
     ) {
         if !info.contains(where: { $0 == expression.name }) {
-            // MARK: Unbound
-            // Intention: record or emit a diagnostic for an unbound function name.
+            addError(.identifierUnbound(name: expression.name), at: .beginningOfFile)
         }
         
         expression.arguments.forEach { $0.acceptDownwardTransformer(self, info) }
     }
     
-    /// Validates an `if` statement by checking the condition and analyzing both branches independently.
-    ///
-    /// - Parameters:
-    ///   - statement: The ``IfStatement`` being visited.
-    ///   - info: The current scope.
-    /// - Important: Both branches are visited with the same incoming scope. Bindings declared
-    ///   within one branch do not leak to the other branch or the outer scope.
     func visitIfStatement(
         _ statement: IfStatement,
         _ info: [BindingInScope]
@@ -554,11 +357,6 @@ class SymbolResolve: SemaPass, ASTDownwardTransformer {
         }
     }
     
-    /// Validates a `return` statement by resolving its expression under the current scope.
-    ///
-    /// - Parameters:
-    ///   - statement: The ``ReturnStatement`` being visited.
-    ///   - info: The current scope.
     func visitReturnStatement(
         _ statement: ReturnStatement,
         _ info: [BindingInScope]
@@ -570,29 +368,13 @@ class SymbolResolve: SemaPass, ASTDownwardTransformer {
         _ statement: AssignmentStatement,
         _ info: [BindingInScope]
     ) {
-        // MARK: NOT DONE
+        if !info.contains(statement.name) {
+            addError(.identifierUnbound(name: statement.name), at: .beginningOfFile)
+        }
+        
+        statement.expression.acceptDownwardTransformer(self, info)
     }
     
-    // MARK: - Block Processing
-    
-    /// Processes a block with progressive scoping: each statement sees bindings introduced by prior statements.
-    ///
-    /// Algorithm per statement:
-    /// 1. Validate the statement under the current accumulated scope (downward traversal).
-    /// 2. Ask ``SymbolGrabber`` which bindings this statement introduces (upward traversal).
-    /// 3. Append those bindings to the scope for subsequent statements.
-    ///
-    /// Example:
-    /// ```swift
-    /// let x = 10        // x becomes available
-    /// let y = x + 5     // can see x; y becomes available
-    /// func f() { ... }  // can see x, y; f becomes available
-    /// var z = f()       // can see x, y, f
-    /// ```
-    ///
-    /// - Parameters:
-    ///   - block: The sequence of block-level nodes to analyze.
-    ///   - info: The initial scope inherited from outer contexts.
     private func processBlock(
         _ block: [any BlockLevelNode],
         _ info: TransformationInfo
@@ -607,3 +389,105 @@ class SymbolResolve: SemaPass, ASTDownwardTransformer {
     }
     
 }
+
+enum SymbolResolveErrorType: CompilerPhaseErrorType {
+    
+    case functionNotFound(name: String)
+    case shadowing(name: String)
+    case parameterNamesNotUnique(repeated: String)
+    case identifierUnbound(name: String)
+    
+    func buildInfo(at location: SourceCodeLocation) -> any SymbolResolvePhaseErrorInfo {
+        switch self {
+        case .functionNotFound(let name):
+            return FunctionNotFoundErrorInfo(location: location, name: name)
+        case .shadowing(let name):
+            return ShadowingErrorInfo(location: location, name: name)
+        case .parameterNamesNotUnique(let repeated):
+            return ParameterNamesNotUniqueErrorInfo(location: location, repeated: repeated)
+        case .identifierUnbound(let name):
+            return IdentifierUnboundErrorInfo(location: location, name: name)
+        }
+    }
+    
+}
+
+protocol SymbolResolveErrorCreator {
+    func functionNotFound(info: FunctionNotFoundErrorInfo) -> SymbolResolveError
+    func shadowing(info: ShadowingErrorInfo) -> SymbolResolveError
+    func parameterNamesNotUnique(info: ParameterNamesNotUniqueErrorInfo) -> SymbolResolveError
+    func identifierUnbound(info: IdentifierUnboundErrorInfo) -> SymbolResolveError
+}
+
+protocol SymbolResolvePhaseErrorInfo: CompilerPhaseErrorInfo {
+    var location: SourceCodeLocation { get }
+    
+    func getError(from manager: any SymbolResolveErrorCreator) -> SymbolResolveError
+}
+
+struct SymbolResolveError: CompilerPhaseError {
+    let location: SourceCodeLocation
+    let message: String
+}
+
+struct FunctionNotFoundErrorInfo: SymbolResolvePhaseErrorInfo {
+    
+    let location: SourceCodeLocation
+    let name: String
+    
+    func getError(from manager: any SymbolResolveErrorCreator) -> SymbolResolveError {
+        manager.functionNotFound(info: self)
+    }
+}
+
+struct ShadowingErrorInfo: SymbolResolvePhaseErrorInfo {
+    let location: SourceCodeLocation
+    let name: String
+    
+    func getError(from manager: any SymbolResolveErrorCreator) -> SymbolResolveError {
+        manager.shadowing(info: self)
+    }
+}
+
+struct ParameterNamesNotUniqueErrorInfo: SymbolResolvePhaseErrorInfo {
+    let location: SourceCodeLocation
+    let repeated: String
+    
+    func getError(from manager: any SymbolResolveErrorCreator) -> SymbolResolveError {
+        manager.parameterNamesNotUnique(info: self)
+    }
+}
+
+struct IdentifierUnboundErrorInfo: SymbolResolvePhaseErrorInfo {
+    let location: SourceCodeLocation
+    let name: String
+    
+    func getError(from manager: any SymbolResolveErrorCreator) -> SymbolResolveError {
+        manager.identifierUnbound(info: self)
+    }
+}
+
+class DefaultSymbolResolveErrorCreator: SymbolResolveErrorCreator {
+    static var shared: DefaultSymbolResolveErrorCreator {
+        DefaultSymbolResolveErrorCreator()
+    }
+    
+    private init() {}
+    
+    func functionNotFound(info: FunctionNotFoundErrorInfo) -> SymbolResolveError {
+        SymbolResolveError(location: .beginningOfFile, message: "s1")
+    }
+    
+    func shadowing(info: ShadowingErrorInfo) -> SymbolResolveError {
+        SymbolResolveError(location: .beginningOfFile, message: "s2")
+    }
+    
+    func parameterNamesNotUnique(info: ParameterNamesNotUniqueErrorInfo) -> SymbolResolveError {
+        SymbolResolveError(location: .beginningOfFile, message: "s3")
+    }
+    
+    func identifierUnbound(info: IdentifierUnboundErrorInfo) -> SymbolResolveError {
+        SymbolResolveError(location: .beginningOfFile, message: "s4")
+    }
+}
+

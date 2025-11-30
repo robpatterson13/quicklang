@@ -57,6 +57,10 @@ public struct PeekableIterator<Element>: IteratorProtocol {
         guard index + (ahead - 1) < elements.count else { return nil }
         return elements[index + (ahead - 1)]
     }
+    
+    public mutating func moveToEnd() {
+        index = elements.count
+    }
 }
 
 extension Array {
