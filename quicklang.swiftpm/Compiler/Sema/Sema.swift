@@ -5,7 +5,7 @@
 //  Created by Rob Patterson on 11/18/25.
 //
 
-protocol SemaPass {
+protocol SemaPass: ASTVisitor {
     associatedtype Result
     var context: ASTContext { get }
     
@@ -18,18 +18,24 @@ final class Sema: CompilerPhase {
     typealias SuccessfulResult = ASTContext?
     
     enum PassType: Int, CaseIterable {
-        case symbolResolve = 0
-        case typecheck = 1
-        case linearize = 2
+        case buildScopes = 0
+        case bindingCheck = 1
+        case buildSymbolTable = 2
+        case typecheck = 3
+        case linearize = 4
         
         fileprivate func makePassManager(using context: ASTContext) -> any SemaPass {
             switch self {
             case .linearize:
                 return ASTLinearize(context: context)
-            case .symbolResolve:
-                return SymbolResolve(context: context)
+            case .bindingCheck:
+                return BindingCheck(context: context)
             case .typecheck:
                 return Typechecker(context: context)
+            case .buildScopes:
+                return BuildScopes(context: context)
+            case .buildSymbolTable:
+                return BuildSymbolTable(context: context)
             }
         }
     }

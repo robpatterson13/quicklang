@@ -1,5 +1,5 @@
 //
-//  SymbolResolve.swift
+//  BindingCheck.swift
 //  quicklang
 //
 //  Created by Rob Patterson on 11/15/25.
@@ -204,7 +204,7 @@ class SymbolGrabber: ASTVisitor {
     
 }
 
-class SymbolResolve: SemaPass, ASTVisitor {
+class BindingCheck: SemaPass, ASTVisitor {
     
     typealias BindingInScope = String
     let context: ASTContext
@@ -220,19 +220,7 @@ class SymbolResolve: SemaPass, ASTVisitor {
         let tree = context.tree
         
         tree.sections.forEach { node in
-            let canBeRecursive = node.acceptVisitor(AllowsRecursiveDefinition.shared)
-            
-            var exclude: String? = nil
-            switch canBeRecursive {
-            case .no:
-                let result = node.acceptVisitor(SymbolGrabber.shared)
-                exclude = result.first
-            case .yes, .notApplicable:
-                break
-            }
-            
-            let globals = context.getGlobalSymbols(excluding: exclude)
-            node.acceptVisitor(self, globals)
+            node.acceptVisitor(self)
         }
     }
     
@@ -242,39 +230,43 @@ class SymbolResolve: SemaPass, ASTVisitor {
         errorManager?.addError(error)
     }
     
+    private func checkInScope(_ node: any ASTNode, name: String, error: SymbolResolveErrorType) {
+        if !(node.scope?.inScope(name) ?? false) {
+            addError(error, at: .beginningOfFile)
+        }
+    }
+    
     func visitIdentifierExpression(
         _ expression: IdentifierExpression,
-        _ info: [BindingInScope]
+        _ info: Void
     ) {
-        if !info.contains(where: { $0 == expression.name }) {
-            addError(.identifierUnbound(name: expression.name), at: .beginningOfFile)
-        }
+        checkInScope(expression, name: expression.name, error: .identifierUnbound(name: expression.name))
     }
     
     func visitBooleanExpression(
         _ expression: BooleanExpression,
-        _ info: [BindingInScope]
+        _ info: Void
     ) {
         // no-op
     }
     
     func visitNumberExpression(
         _ expression: NumberExpression,
-        _ info: [BindingInScope]
+        _ info: Void
     ) {
         // no-op
     }
     
     func visitUnaryOperation(
         _ operation: UnaryOperation,
-        _ info: [BindingInScope]
+        _ info: Void
     ) {
         operation.expression.acceptVisitor(self, info)
     }
     
     func visitBinaryOperation(
         _ operation: BinaryOperation,
-        _ info: [BindingInScope]
+        _ info: Void
     ) {
         operation.lhs.acceptVisitor(self, info)
         operation.rhs.acceptVisitor(self, info)
@@ -282,39 +274,39 @@ class SymbolResolve: SemaPass, ASTVisitor {
     
     func visitLetDefinition(
         _ definition: LetDefinition,
-        _ info: [BindingInScope]
+        _ info: Void
     ) {
-        enforceNoShadowing(for: definition.name, scope: info)
+        enforceNoShadowing(for: .definition(definition))
         definition.expression.acceptVisitor(self, info)
     }
     
     func visitVarDefinition(
         _ definition: VarDefinition,
-        _ info: [BindingInScope]
+        _ info: Void
     ) {
-        enforceNoShadowing(for: definition.name, scope: info)
+        enforceNoShadowing(for: .definition(definition))
         definition.expression.acceptVisitor(self, info)
     }
     
     func visitFuncDefinition(
         _ definition: FuncDefinition,
-        _ info: [BindingInScope]
+        _ info: Void
     ) {
-        enforceNoShadowing(for: definition.name, scope: info)
+        enforceNoShadowing(for: .function(definition))
         definition.parameters.forEach { param in
-            enforceNoShadowing(for: param.name, scope: info)
+            enforceNoShadowing(for: .funcParameter(param))
         }
         
         enforceUniqueParameterNames(definition.parameters)
         
-        var newInfo = info
-        newInfo.append(definition.name)
-        let parameters = definition.parameters.map { $0.name }
-        newInfo.append(contentsOf: parameters)
-        processBlock(definition.body, newInfo)
+        processBlock(definition.body)
     }
     
     private func enforceUniqueParameterNames(_ params: [FuncDefinition.Parameter]) {
+        guard !params.isEmpty else {
+            return
+        }
+        
         let paramNames = params.map { $0.name }
         let paramSet = Set(arrayLiteral: paramNames)
         
@@ -324,62 +316,54 @@ class SymbolResolve: SemaPass, ASTVisitor {
         }
     }
     
-    private func enforceNoShadowing(for binding: String, scope: [BindingInScope]) {
-        guard !scope.contains(binding) else {
-            addError(.shadowing(name: binding), at: .beginningOfFile)
-            return
+    private func enforceNoShadowing(for binding: ASTScope.IntroducedBinding) {
+        if let scope = binding.scope,
+           scope.alreadyDeclared(binding) {
+            addError(.shadowing(name: binding.identifiableName.0), at: .beginningOfFile)
         }
     }
     
     func visitFuncApplication(
         _ expression: FuncApplication,
-        _ info: [BindingInScope]
+        _ info: Void
     ) {
-        if !info.contains(expression.name) {
-            addError(.functionNotFound(name: expression.name), at: .beginningOfFile)
-        }
+        checkInScope(expression, name: expression.name, error: .functionNotFound(name: expression.name))
         
         expression.arguments.forEach { $0.acceptVisitor(self, info) }
     }
     
     func visitIfStatement(
         _ statement: IfStatement,
-        _ info: [BindingInScope]
+        _ info: Void
     ) {
         statement.condition.acceptVisitor(self, info)
-        processBlock(statement.thenBranch, info)
+        processBlock(statement.thenBranch)
         if let elseBranch = statement.elseBranch {
-            processBlock(elseBranch, info)
+            processBlock(elseBranch)
         }
     }
     
     func visitReturnStatement(
         _ statement: ReturnStatement,
-        _ info: [BindingInScope]
+        _ info: Void
     ) {
         statement.expression.acceptVisitor(self, info)
     }
     
     func visitAssignmentStatement(
         _ statement: AssignmentStatement,
-        _ info: [BindingInScope]
+        _ info: Void
     ) {
-        if !info.contains(statement.name) {
-            addError(.identifierUnbound(name: statement.name), at: .beginningOfFile)
-        }
+        checkInScope(statement, name: statement.name, error: .identifierUnbound(name: statement.name))
         
         statement.expression.acceptVisitor(self, info)
     }
     
     private func processBlock(
-        _ block: [any BlockLevelNode],
-        _ info: [BindingInScope]
+        _ block: [any BlockLevelNode]
     ) {
-        var mutInfo = info
         block.forEach { node in
-            node.acceptVisitor(self, mutInfo)
-            let bindings = node.acceptVisitor(SymbolGrabber.shared)
-            mutInfo.append(contentsOf: bindings)
+            node.acceptVisitor(self)
         }
     }
     

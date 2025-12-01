@@ -5,6 +5,109 @@
 //  Created by Rob Patterson on 2/16/25.
 //
 
+class InferType: ASTVisitor {
+    typealias VisitorInfo = Void
+    typealias VisitorResult = TypeName?
+    
+    var context: ASTContext
+    
+    init(context: ASTContext) {
+        self.context = context
+    }
+    
+    func visitIdentifierExpression(
+        _ expression: IdentifierExpression,
+        _ info: Void
+    ) -> TypeName? {
+        context.getTypeOf(symbol: expression.name)
+    }
+    
+    func visitBooleanExpression(
+        _ expression: BooleanExpression,
+        _ info: Void
+    ) -> TypeName? {
+        .Bool
+    }
+    
+    func visitNumberExpression(
+        _ expression: NumberExpression,
+        _ info: Void
+    ) -> TypeName? {
+        .Int
+    }
+    
+    func visitUnaryOperation(
+        _ operation: UnaryOperation,
+        _ info: Void
+    ) -> TypeName? {
+        switch operation.op {
+        case .not, .neg:
+            return .Bool
+        }
+    }
+    
+    func visitBinaryOperation(
+        _ operation: BinaryOperation,
+        _ info: Void
+    ) -> TypeName? {
+        switch operation.op {
+        case .plus, .times, .minus:
+            return .Int
+        case .and, .or:
+            return .Bool
+        }
+    }
+    
+    func visitFuncApplication(
+        _ expression: FuncApplication,
+        _ info: Void
+    ) -> TypeName? {
+        context.getTypeOf(symbol: expression.name)
+    }
+    
+    func visitLetDefinition(
+        _ definition: LetDefinition,
+        _ info: Void
+    ) -> TypeName? {
+        nil
+    }
+    
+    func visitVarDefinition(
+        _ definition: VarDefinition,
+        _ info: Void
+    ) -> TypeName? {
+        nil
+    }
+    
+    func visitFuncDefinition(
+        _ definition: FuncDefinition,
+        _ info: Void
+    ) -> TypeName? {
+        nil
+    }
+    
+    func visitIfStatement(
+        _ statement: IfStatement,
+        _ info: Void
+    ) -> TypeName? {
+        nil
+    }
+    
+    func visitReturnStatement(
+        _ statement: ReturnStatement,
+        _ info: Void
+    ) -> TypeName? {
+        nil
+    }
+    
+    func visitAssignmentStatement(
+        _ statement: AssignmentStatement,
+        _ info: Void
+    ) -> TypeName? {
+        nil
+    }
+}
+
 class Typechecker: SemaPass, ASTVisitor {
     typealias VisitorResult = Void
     typealias VisitorInfo = Void
@@ -21,9 +124,11 @@ class Typechecker: SemaPass, ASTVisitor {
     }
     
     let context: ASTContext
+    let typeInferrer: InferType
     
     init(context: ASTContext) {
         self.context = context
+        self.typeInferrer = .init(context: context)
     }
     
     private func addError(_ error: TypecheckerErrorType, at location: SourceCodeLocation) {
@@ -32,14 +137,10 @@ class Typechecker: SemaPass, ASTVisitor {
         errorManager?.addError(error)
     }
     
-    private func isExpression(_ expr: any ExpressionNode, type: TypeName) -> Bool {
-        return type == context.getType(of: expr)
-    }
-    
-    private func checkDefinition(_ definition: any DefinitionNode) {
-        if let type = definition.type, !isExpression(definition.expression, type: type) {
-            let actuallyIs = context.getType(of: definition.expression)
-            addError(.typeMismatchInDefinition(defined: type, is: actuallyIs), at: .beginningOfFile)
+    private func checkExpression(_ node: any ExpressionNode, is type: TypeName, error: TypecheckerErrorType) {
+        let result = node.acceptVisitor(typeInferrer)
+        if result != type {
+            addError(error, at: .beginningOfFile)
         }
     }
     
@@ -52,9 +153,7 @@ class Typechecker: SemaPass, ASTVisitor {
     func visitUnaryOperation(_ operation: UnaryOperation, _ info: Void) {
         switch operation.op {
         case .not, .neg:
-            if !isExpression(operation.expression, type: .Bool) {
-                addError(.operatorTypeMismatch(defined: .Bool), at: .beginningOfFile)
-            }
+            checkExpression(operation, is: .Bool, error: .operatorTypeMismatch(defined: .Bool))
         }
         
         operation.expression.acceptVisitor(self)
@@ -63,15 +162,13 @@ class Typechecker: SemaPass, ASTVisitor {
     func visitBinaryOperation(_ operation: BinaryOperation, _ info: Void) {
         switch operation.op {
         case .plus, .minus, .times:
-            if !isExpression(operation.lhs, type: .Int),
-               !isExpression(operation.rhs, type: .Int) {
-                addError(.operatorTypeMismatch(defined: .Int), at: .beginningOfFile)
-            }
+            let error = TypecheckerErrorType.operatorTypeMismatch(defined: .Int)
+            checkExpression(operation.lhs, is: .Int, error: error)
+            checkExpression(operation.rhs, is: .Int, error: error)
         case .and, .or:
-            if !isExpression(operation.lhs, type: .Bool),
-               !isExpression(operation.rhs, type: .Bool) {
-                addError(.operatorTypeMismatch(defined: .Bool), at: .beginningOfFile)
-            }
+            let error = TypecheckerErrorType.operatorTypeMismatch(defined: .Int)
+            checkExpression(operation.lhs, is: .Bool, error: error)
+            checkExpression(operation.rhs, is: .Bool, error: error)
         }
         
         operation.lhs.acceptVisitor(self)
@@ -86,56 +183,49 @@ class Typechecker: SemaPass, ASTVisitor {
         checkDefinition(definition)
     }
     
+    private func checkDefinition(_ definition: any DefinitionNode) {
+        let type = definition.type
+        checkExpression(definition.expression, is: type, error: .typeMismatchInDefinition(defined: type))
+        
+        definition.expression.acceptVisitor(self)
+    }
+    
     func visitFuncDefinition(_ definition: FuncDefinition, _ info: Void) {
-        // do the body of the definition first
-        definition.body.forEach { $0.acceptVisitor(self) }
+        definition.body.forEach { node in
+            node.acceptVisitor(self)
+        }
         
-        // then type check the function definition + returned value
-        let returnType = definition.type
         let returnStmt = definition.body.first { $0 is ReturnStatement } as? ReturnStatement
+        let returnType = definition.type.returnType
         
-        // if our function is void and we don't return anything, exit
-        if definition.type == .Void && returnStmt == nil {
+        if let returnType, returnStmt == nil && returnType != .Void {
+            addError(.funcReturnTypeMismatch(defined: returnType), at: .beginningOfFile)
             return
         }
         
-        // if our function isn't void and we don't return anything, add error
-        // and exit
-        guard let returnStmt else {
-            addError(.missingReturnInNonvoidFunc, at: .beginningOfFile)
+        if returnStmt != nil, let returnType, returnType == .Void {
+            addError(.voidCannotReturnValue, at: .beginningOfFile)
             return
         }
         
-        // if our return type isn't void, add error and exit
-        guard returnType != .Void else {
-            addError(.voidCannotReturnValue(returned: returnType), at: .beginningOfFile)
-            return
-        }
-        
-        if !isExpression(returnStmt.expression, type: returnType) {
-            let actuallyIs = context.getType(of: returnStmt.expression)
-            addError(.funcReturnTypeMismatch(defined: returnType, is: actuallyIs), at: .beginningOfFile)
+        if let returnStmt, let returnType {
+            checkExpression(returnStmt.expression, is: returnType, error: .funcReturnTypeMismatch(defined: returnType))
         }
     }
     
     func visitFuncApplication(_ expression: FuncApplication, _ info: Void) {
-        let params = context.getFuncParams(of: expression.name)
+        let funcType = context.getTypeOf(symbol: expression.name)
+        let paramTypes = funcType!.paramTypes!
         
-        for (idx, arg) in expression.arguments.enumerated()
-        where !isExpression(arg, type: params[idx].type) {
-            let actuallyIs = context.getType(of: arg)
-            addError(.funcArgWrongType(defined: params[idx].type, is: actuallyIs), at: .beginningOfFile)
-            return
+        for (idx, arg) in expression.arguments.enumerated() {
+            checkExpression(arg, is: paramTypes[idx], error: .funcArgWrongType(defined: paramTypes[idx]))
         }
         
         expression.arguments.forEach { $0.acceptVisitor(self) }
     }
     
     func visitIfStatement(_ statement: IfStatement, _ info: Void) {
-        if !isExpression(statement.condition, type: .Bool) {
-            let actuallyIs = context.getType(of: statement.condition)
-            addError(.ifConditionNotBool(is: actuallyIs), at: .beginningOfFile)
-        }
+        checkExpression(statement.condition, is: .Bool, error: .ifConditionNotBool)
         
         statement.thenBranch.forEach { $0.acceptVisitor(self) }
         statement.elseBranch?.forEach { $0.acceptVisitor(self) }
@@ -146,33 +236,36 @@ class Typechecker: SemaPass, ASTVisitor {
     }
     
     func visitAssignmentStatement(_ statement: AssignmentStatement, _ info: Void) {
-        // MARK: NOT DONE
+        let type = context.getTypeOf(symbol: statement.name)
+        if let type {
+            checkExpression(statement.expression, is: type, error: .typeMismatchInDefinition(defined: type))
+        }
     }
     
 }
 
 enum TypecheckerErrorType: CompilerPhaseErrorType {
     
-    case typeMismatchInDefinition(defined: TypeName, is: TypeName)
-    case ifConditionNotBool(is: TypeName)
-    case funcArgWrongType(defined: TypeName, is: TypeName)
-    case funcReturnTypeMismatch(defined: TypeName, is: TypeName)
-    case voidCannotReturnValue(returned: TypeName)
+    case typeMismatchInDefinition(defined: TypeName)
+    case ifConditionNotBool
+    case funcArgWrongType(defined: TypeName)
+    case funcReturnTypeMismatch(defined: TypeName)
+    case voidCannotReturnValue
     case missingReturnInNonvoidFunc
     case operatorTypeMismatch(defined: TypeName)
     
     func buildInfo(at location: SourceCodeLocation) -> any TypecheckPhaseErrorInfo {
         switch self {
-        case .typeMismatchInDefinition(let defined, let actuallyIs):
-            return TypeMismatchInDefinitionErrorInfo(location: location, definedAs: defined, actuallyIs: actuallyIs)
-        case .ifConditionNotBool(let actuallyIs):
-            return IfConditionNotBoolErrorInfo(location: location, actuallyIs: actuallyIs)
-        case .funcArgWrongType(let defined, let actuallyIs):
-            return FuncArgWrongTypeErrorInfo(location: location, definedAs: defined, actuallyIs: actuallyIs)
-        case .funcReturnTypeMismatch(let defined, let actuallyIs):
-            return FuncArgWrongTypeErrorInfo(location: location, definedAs: defined, actuallyIs: actuallyIs)
-        case .voidCannotReturnValue(let returned):
-            return VoidCannotReturnValueErrorInfo(location: location, actuallyIs: returned)
+        case .typeMismatchInDefinition(let defined):
+            return TypeMismatchInDefinitionErrorInfo(location: location, definedAs: defined)
+        case .ifConditionNotBool:
+            return IfConditionNotBoolErrorInfo(location: location)
+        case .funcArgWrongType(let defined):
+            return FuncArgWrongTypeErrorInfo(location: location, definedAs: defined)
+        case .funcReturnTypeMismatch(let defined):
+            return FuncArgWrongTypeErrorInfo(location: location, definedAs: defined)
+        case .voidCannotReturnValue:
+            return VoidCannotReturnValueErrorInfo(location: location)
         case .missingReturnInNonvoidFunc:
             return MissingReturnInNonvoidFuncErrorInfo(location: location)
         case .operatorTypeMismatch(let defined):
@@ -207,7 +300,6 @@ struct TypeMismatchInDefinitionErrorInfo: TypecheckPhaseErrorInfo {
     
     let location: SourceCodeLocation
     let definedAs: TypeName
-    let actuallyIs: TypeName
     
     func getError(from manager: any TypecheckerErrorCreator) -> TypecheckerError {
         manager.typeMismatchInDefinition(info: self)
@@ -216,7 +308,6 @@ struct TypeMismatchInDefinitionErrorInfo: TypecheckPhaseErrorInfo {
 
 struct IfConditionNotBoolErrorInfo: TypecheckPhaseErrorInfo {
     let location: SourceCodeLocation
-    let actuallyIs: TypeName
     
     func getError(from manager: any TypecheckerErrorCreator) -> TypecheckerError {
         manager.ifConditionNotBool(info: self)
@@ -226,7 +317,6 @@ struct IfConditionNotBoolErrorInfo: TypecheckPhaseErrorInfo {
 struct FuncArgWrongTypeErrorInfo: TypecheckPhaseErrorInfo {
     let location: SourceCodeLocation
     let definedAs: TypeName
-    let actuallyIs: TypeName
     
     func getError(from manager: any TypecheckerErrorCreator) -> TypecheckerError {
         manager.funcArgWrongType(info: self)
@@ -245,7 +335,6 @@ struct FuncReturnTypeMismatchErrorInfo: TypecheckPhaseErrorInfo {
 
 struct VoidCannotReturnValueErrorInfo: TypecheckPhaseErrorInfo {
     let location: SourceCodeLocation
-    let actuallyIs: TypeName
     
     func getError(from manager: any TypecheckerErrorCreator) -> TypecheckerError {
         manager.voidCannotReturnValue(info: self)

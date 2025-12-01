@@ -325,8 +325,6 @@ final class Parser: CompilerPhase {
             return .incomplete
         }
         
-        context.addParamsTo(func: identifier, parameters)
-        
         let recoverFromRParenMissing = consume(.RPAREN, else: .expectedRightParen(where: .functionDefinition))
         if let recoverFromRParenMissing {
             recover(using: recoverFromRParenMissing)
@@ -345,14 +343,13 @@ final class Parser: CompilerPhase {
         
         let parameterTypes = parameters.map { $0.type }
         let funcType: TypeName = .Arrow(from: parameterTypes, to: typeName)
-        context.assignTypeOf(funcType, to: identifier)
         
         let body = parseBlock(in: .functionBody)
         if body.anyIncomplete {
             return .incomplete
         }
         
-        return FuncDefinition(name: identifier, type: typeName, parameters: parameters, body: body)
+        return FuncDefinition(name: identifier, type: funcType, parameters: parameters, body: body)
     }
     
     private enum BlockContext {
@@ -570,8 +567,6 @@ final class Parser: CompilerPhase {
         guard let type else {
             return LetDefinition.incomplete
         }
-        
-        context.assignTypeOf(type, to: identifier)
         
         let recoverFromEqualMissing = consume(.EQUAL, else: .expectedEqualInAssignment)
         if let recoverFromEqualMissing {

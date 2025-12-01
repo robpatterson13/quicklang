@@ -5,6 +5,23 @@
 //  Created by Rob Patterson on 11/16/25.
 //
 
+// MARK: MAKE THIS PRODUCE THE IR
+// MARK: MAKE THIS PRODUCE THE IR
+// MARK: MAKE THIS PRODUCE THE IR
+// MARK: MAKE THIS PRODUCE THE IR
+// MARK: MAKE THIS PRODUCE THE IR
+// MARK: MAKE THIS PRODUCE THE IR
+// MARK: MAKE THIS PRODUCE THE IR
+// MARK: MAKE THIS PRODUCE THE IR
+// MARK: MAKE THIS PRODUCE THE IR
+// MARK: MAKE THIS PRODUCE THE IR
+// MARK: MAKE THIS PRODUCE THE IR
+// MARK: MAKE THIS PRODUCE THE IR
+// MARK: MAKE THIS PRODUCE THE IR
+// MARK: MAKE THIS PRODUCE THE IR
+// MARK: MAKE THIS PRODUCE THE IR
+// MARK: MAKE THIS PRODUCE THE IR
+
 import Foundation
 
 class ASTLinearize: SemaPass, ASTVisitor {
@@ -83,8 +100,7 @@ class ASTLinearize: SemaPass, ASTVisitor {
         
         let newName = GenSymInfo.singleton.genSym(root: "unary_op", id: operation.id)
         let newOperation = UnaryOperation(op: operation.op, expression: newExpr)
-        let newType = context.getType(of: newOperation)
-        let newBinding = LetDefinition(name: newName, type: newType, expression: newOperation)
+        let newBinding = LetDefinition(name: newName, type: .Bool, expression: newOperation)
         newBindings.append(newBinding)
         
         let newIdentifierExpr = IdentifierExpression(name: newName)
@@ -102,8 +118,7 @@ class ASTLinearize: SemaPass, ASTVisitor {
         
         let newName = GenSymInfo.singleton.genSym(root: "binary_op", id: operation.id)
         let newOperation = BinaryOperation(op: operation.op, lhs: newLhs, rhs: newRhs)
-        let newType = context.getType(of: newOperation)
-        let newBinding = LetDefinition(name: newName, type: newType, expression: newOperation)
+        let newBinding = LetDefinition(name: newName, type: .Bool, expression: newOperation)
         newBindings.append(newBinding)
         
         let newIdentifierExpr = IdentifierExpression(name: newName)
@@ -131,14 +146,12 @@ class ASTLinearize: SemaPass, ASTVisitor {
     ) -> NewBindingInfo {
         let (newExpr, newBindings) = getNodeAndBindings(expression: definition.expression)
         
-        let newType = context.getType(of: newExpr)
-        
         let newDefinition: any DefinitionNode
         switch definition {
         case is LetDefinition:
-            newDefinition = LetDefinition(name: definition.name, type: newType, expression: newExpr)
+            newDefinition = LetDefinition(name: definition.name, type: .Bool, expression: newExpr)
         case is VarDefinition:
-            newDefinition = VarDefinition(name: definition.name, type: newType, expression: newExpr)
+            newDefinition = VarDefinition(name: definition.name, type: .Bool, expression: newExpr)
         default:
             fatalError("not possible")
         }
@@ -177,8 +190,7 @@ class ASTLinearize: SemaPass, ASTVisitor {
         
         let newName = GenSymInfo.singleton.genSym(root: "func_app", id: expression.id)
         let newExpr = FuncApplication(name: expression.name, arguments: args)
-        let newType = context.getType(of: newExpr)
-        let newBinding = LetDefinition(name: newName, type: newType, expression: newExpr)
+        let newBinding = LetDefinition(name: newName, type: .Bool, expression: newExpr)
         bindings.append(newBinding)
         
         let newIdentifierExpr = LinearizedNodeResult.id(IdentifierExpression(name: newName))

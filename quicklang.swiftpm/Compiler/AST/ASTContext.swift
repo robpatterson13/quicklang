@@ -7,166 +7,133 @@
 
 import Foundation
 
+class IsGlobalSymbol: ASTVisitor {
+    typealias VisitorInfo = Void
+    typealias VisitorResult = ASTScope.IntroducedBinding?
+    
+    static var shared: IsGlobalSymbol {
+        .init()
+    }
+    
+    private init() {}
+    
+    func visitIdentifierExpression(
+        _ expression: IdentifierExpression,
+        _ info: Void
+    ) -> ASTScope.IntroducedBinding? {
+        nil
+    }
+    
+    func visitBooleanExpression(
+        _ expression: BooleanExpression,
+        _ info: Void
+    ) -> ASTScope.IntroducedBinding? {
+        nil
+    }
+    
+    func visitNumberExpression(
+        _ expression: NumberExpression,
+        _ info: Void
+    ) -> ASTScope.IntroducedBinding? {
+        nil
+    }
+    
+    func visitUnaryOperation(
+        _ operation: UnaryOperation,
+        _ info: Void
+    ) -> ASTScope.IntroducedBinding? {
+        nil
+    }
+    
+    func visitBinaryOperation(
+        _ operation: BinaryOperation,
+        _ info: Void
+    ) -> ASTScope.IntroducedBinding? {
+        nil
+    }
+    
+    func visitLetDefinition(
+        _ definition: LetDefinition,
+        _ info: Void
+    ) -> ASTScope.IntroducedBinding? {
+        .definition(definition)
+    }
+    
+    func visitVarDefinition(
+        _ definition: VarDefinition,
+        _ info: Void
+    ) -> ASTScope.IntroducedBinding? {
+        .definition(definition)
+    }
+    
+    func visitFuncDefinition(
+        _ definition: FuncDefinition,
+        _ info: Void
+    ) -> ASTScope.IntroducedBinding? {
+        .function(definition)
+    }
+    
+    func visitFuncApplication(
+        _ expression: FuncApplication,
+        _ info: Void
+    ) -> ASTScope.IntroducedBinding? {
+        nil
+    }
+    
+    func visitIfStatement(
+        _ statement: IfStatement,
+        _ info: Void
+    ) -> ASTScope.IntroducedBinding? {
+        nil
+    }
+    
+    func visitReturnStatement(
+        _ statement: ReturnStatement,
+        _ info: Void
+    ) -> ASTScope.IntroducedBinding? {
+        nil
+    }
+    
+    func visitAssignmentStatement(
+        _ statement: AssignmentStatement,
+        _ info: Void
+    ) -> ASTScope.IntroducedBinding? {
+        nil
+    }
+}
+
 class ASTContext {
     
-    struct ScopeInfo {
-        let inScope: [String]
-    }
-    
-    struct SymbolInfo {
-        let id: UUID?
-        let type: TypeName?
-        let scopeInfo: ScopeInfo?
-        
-        typealias Parameters = [FuncDefinition.Parameter]
-        let params: Parameters?
-        
-        init(
-            id: UUID? = nil,
-            type: TypeName? = nil,
-            scopeInfo: ScopeInfo? = nil,
-            params: Parameters? = nil
-        ) {
-            self.id = id
-            self.type = type
-            self.scopeInfo = scopeInfo
-            self.params = params
-        }
-        
-        func makeNew(
-            id: UUID? = nil,
-            type: TypeName? = nil,
-            scopeInfo: ScopeInfo? = nil,
-            params: Parameters? = nil
-        ) -> SymbolInfo {
-            let newId = id == nil ? self.id : id!
-            let newType = type == nil ? self.type : type!
-            let newScopeInfo = scopeInfo == nil ? self.scopeInfo : scopeInfo!
-            let params = params == nil ? self.params : params!
-            
-            return SymbolInfo(id: newId, type: newType, scopeInfo: newScopeInfo, params: params)
-        }
-    }
-    
-    private var types = [UUID: TypeName]()
-    private var symbols = [String: SymbolInfo]()
-    
     var tree: TopLevel
+    
+    var symbols: [String: TypeName] = [:]
     
     init(tree: TopLevel = TopLevel(sections: [])) {
         self.tree = tree
     }
     
-    func getType(of expr: any ExpressionNode) -> TypeName {
-        if let type = types[expr.id] {
-            return type
-        }
+    func allGlobals(excluding: (any TopLevelNode)? = nil) -> [ASTScope.IntroducedBinding] {
+        var topLevelNodes = [ASTScope.IntroducedBinding]()
         
-        return askForType(of: expr)
-    }
-    
-    func getFuncParams(of id: String) -> [FuncDefinition.Parameter] {
-        guard let params = symbols[id]?.params else {
-            fatalError("No func params available for \(id)")
-        }
-        
-        return params
-    }
-    
-    func getScopeInfo(of id: String) -> ScopeInfo {
-        guard let info = symbols[id]?.scopeInfo else {
-            fatalError("No func params available for \(id)")
-        }
-        
-        return info
-    }
-    
-    func assignTypeOf(_ type: TypeName, to symbol: String) {
-        let symbolInfo = symbols[symbol]
-        if let symbolInfo {
-            symbols[symbol] = symbolInfo.makeNew(type: type)
-        } else {
-            symbols[symbol] = SymbolInfo(type: type)
-        }
-    }
-    
-    func addParamsTo(func symbol: String, _ params: [FuncDefinition.Parameter]) {
-        let symbolInfo = symbols[symbol]
-        if let symbolInfo {
-            symbols[symbol] = symbolInfo.makeNew(params: params)
-        } else {
-            symbols[symbol] = SymbolInfo(params: params)
-        }
-    }
-    
-    func queryTypeOfIdentifierExpression(_ expr: IdentifierExpression) {
-        guard let varDefInfo = symbols[expr.name] else {
-            fatalError("Symbol table does not contain identifier")
-        }
-    }
-    
-    func queryTypeOfBooleanExpression(_ expr: BooleanExpression) {
-        types[expr.id] = .Bool
-    }
-    
-    func queryTypeOfNumberExpression(_ expr: NumberExpression) {
-        types[expr.id] = .Int
-    }
-    
-    func queryTypeOfFuncApplication(_ expr: FuncApplication) {
-        guard let funcDefInfo = symbols[expr.name] else {
-            fatalError("Symbol table does not contain func")
-        }
-        
-        guard let type = funcDefInfo.type else {
-            fatalError("Symbol table must have type for function declaration")
-        }
-        
-        switch type {
-        case .Arrow(_, to: let to):
-            types[expr.id] = to
-        default:
-            fatalError("Functions must have arrow types")
-        }
-    }
-    
-    func queryTypeOfUnaryOperation(_ expr: UnaryOperation) {
-        switch expr.op {
-        case .not, .neg:
-            types[expr.id] = .Bool
-        }
-    }
-    
-    func queryTypeOfBinaryOperation(_ expr: BinaryOperation) {
-        switch expr.op {
-        case .plus, .minus, .times:
-            types[expr.id] = .Int
-        case .and, .or:
-            types[expr.id] = .Bool
-        }
-    }
-    
-    func addSymbolInfo(_ info: SymbolInfo, for id: String) {
-        symbols[id] = info
-    }
-    
-    func getGlobalSymbols(excluding: String? = nil) -> [String] {
-        var globals: [String] = []
         tree.sections.forEach { node in
-            let bindings = node.acceptVisitor(SymbolGrabber.shared)
-            if let excluding, bindings.contains(excluding) {
-                globals.append(contentsOf: bindings.filter({ $0 != excluding }))
-            } else {
-                globals.append(contentsOf: bindings)
+            if let result = node.acceptVisitor(IsGlobalSymbol.shared) {
+                if let excluding, excluding.id == node.id {
+                    return
+                }
+                
+                topLevelNodes.append(result)
             }
         }
         
-        return globals
+        return topLevelNodes
     }
     
-    private func askForType(of expr: any ExpressionNode) -> TypeName {
-        expr.acceptTypeQuery(self)
-        return types[expr.id]!
+    func getTypeOf(symbol: String) -> TypeName? {
+        symbols[symbol]
+    }
+    
+    func assignTypeOf(_ type: TypeName, to symbol: String) {
+        symbols[symbol] = type
     }
 }
 

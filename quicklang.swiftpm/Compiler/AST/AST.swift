@@ -15,6 +15,7 @@ protocol ASTNodeIncompletable {
 
 protocol ASTNode: Hashable, ASTNodeIncompletable {
     var id: UUID { get }
+    var scope: ASTScope? { get set }
     func acceptVisitor<V: ASTVisitor>(_ visitor: V, _ info: V.VisitorInfo) -> V.VisitorResult
 }
 
@@ -98,6 +99,8 @@ protocol BlockLevelNode: ASTNode {
 }
 
 final class BlockLevelNodeIncomplete: BlockLevelNode {
+    var scope: ASTScope?
+    
     let id = UUID()
     var isIncomplete: Bool
     
@@ -117,6 +120,7 @@ final class BlockLevelNodeIncomplete: BlockLevelNode {
 protocol TopLevelNode: BlockLevelNode { }
 
 final class TopLevelNodeIncomplete: TopLevelNode {
+    var scope: ASTScope?
     let id = UUID()
     static var incomplete: TopLevelNodeIncomplete {
         TopLevelNodeIncomplete()
@@ -140,12 +144,11 @@ extension TopLevelNode {
 }
 
 protocol ExpressionNode: ASTNode {
-    func acceptTypeQuery(_ context: ASTContext)
 }
 
 protocol DefinitionNode: TopLevelNode {
     var name: String { get }
-    var type: TypeName? { get }
+    var type: TypeName { get }
     var expression: any ExpressionNode { get }
 }
 
@@ -154,6 +157,7 @@ protocol StatementNode: BlockLevelNode { }
 final class IdentifierExpression: ExpressionNode, TopLevelNode {
     let id = UUID()
     let name: String
+    var scope: ASTScope?
     
     let isIncomplete: Bool
     
@@ -174,15 +178,12 @@ final class IdentifierExpression: ExpressionNode, TopLevelNode {
     func acceptVisitor<V: ASTVisitor>(_ visitor: V, _ info: V.VisitorInfo) -> V.VisitorResult {
         visitor.visitIdentifierExpression(self, info)
     }
-    
-    func acceptTypeQuery(_ context: ASTContext) {
-        context.queryTypeOfIdentifierExpression(self)
-    }
 }
 
 final class BooleanExpression: ExpressionNode {
     let id = UUID()
     let value: Bool
+    var scope: ASTScope?
     
     let isIncomplete: Bool
     
@@ -203,15 +204,12 @@ final class BooleanExpression: ExpressionNode {
     func acceptVisitor<V: ASTVisitor>(_ visitor: V, _ info: V.VisitorInfo) -> V.VisitorResult {
         visitor.visitBooleanExpression(self, info)
     }
-    
-    func acceptTypeQuery(_ context: ASTContext) {
-        context.queryTypeOfBooleanExpression(self)
-    }
 }
 
 final class NumberExpression: ExpressionNode {
     let id = UUID()
     let value: Int
+    var scope: ASTScope?
     
     let isIncomplete: Bool
     
@@ -232,10 +230,6 @@ final class NumberExpression: ExpressionNode {
     func acceptVisitor<V: ASTVisitor>(_ visitor: V, _ info: V.VisitorInfo) -> V.VisitorResult {
         visitor.visitNumberExpression(self, info)
     }
-    
-    func acceptTypeQuery(_ context: ASTContext) {
-        context.queryTypeOfNumberExpression(self)
-    }
 }
 
 final class UnaryOperation: ExpressionNode {
@@ -247,6 +241,7 @@ final class UnaryOperation: ExpressionNode {
         case neg
     }
     let expression: any ExpressionNode
+    var scope: ASTScope?
     
     let isIncomplete: Bool
     
@@ -269,10 +264,6 @@ final class UnaryOperation: ExpressionNode {
     func acceptVisitor<V: ASTVisitor>(_ visitor: V, _ info: V.VisitorInfo) -> V.VisitorResult {
         visitor.visitUnaryOperation(self, info)
     }
-    
-    func acceptTypeQuery(_ context: ASTContext) {
-        context.queryTypeOfUnaryOperation(self)
-    }
 }
 
 final class BinaryOperation: ExpressionNode {
@@ -287,6 +278,7 @@ final class BinaryOperation: ExpressionNode {
         case or
     }
     let lhs, rhs: any ExpressionNode
+    var scope: ASTScope?
     
     let isIncomplete: Bool
     
@@ -311,17 +303,14 @@ final class BinaryOperation: ExpressionNode {
     func acceptVisitor<V: ASTVisitor>(_ visitor: V, _ info: V.VisitorInfo) -> V.VisitorResult {
         visitor.visitBinaryOperation(self, info)
     }
-    
-    func acceptTypeQuery(_ context: ASTContext) {
-        context.queryTypeOfBinaryOperation(self)
-    }
 }
 
 final class LetDefinition: DefinitionNode  {
     let id = UUID()
     let name: String
-    let type: TypeName?
+    let type: TypeName
     let expression: any ExpressionNode
+    var scope: ASTScope?
     
     let isIncomplete: Bool
     
@@ -331,7 +320,7 @@ final class LetDefinition: DefinitionNode  {
     
     private init() {
         self.name = ""
-        self.type = nil
+        self.type = .Int
         self.expression = IdentifierExpression.incomplete
         self.isIncomplete = true
     }
@@ -351,8 +340,9 @@ final class LetDefinition: DefinitionNode  {
 final class VarDefinition: DefinitionNode {
     let id = UUID()
     let name: String
-    let type: TypeName?
+    let type: TypeName
     let expression: any ExpressionNode
+    var scope: ASTScope?
     
     let isIncomplete: Bool
     
@@ -362,7 +352,7 @@ final class VarDefinition: DefinitionNode {
     
     private init() {
         self.name = ""
-        self.type = nil
+        self.type = .Int
         self.expression = IdentifierExpression.incomplete
         self.isIncomplete = true
     }
@@ -399,14 +389,34 @@ enum TypeName: Equatable {
             return false
         }
     }
+    
+    var returnType: TypeName? {
+        switch self {
+        case .Arrow(from: _, to: let to):
+            return to
+        default:
+            return nil
+        }
+    }
+    
+    var paramTypes: [TypeName]? {
+        switch self {
+        case .Arrow(from: let from, to: _):
+            return from
+        default:
+            return nil
+        }
+    }
 }
 
 final class FuncDefinition: TopLevelNode {
     
-    struct Parameter {
+    final class Parameter {
+        let id = UUID()
         let name: String
         let type: TypeName
         let isIncomplete: Bool
+        var scope: ASTScope?
         static var incomplete: Parameter {
             return Parameter()
         }
@@ -429,6 +439,7 @@ final class FuncDefinition: TopLevelNode {
     let type: TypeName
     let parameters: [Parameter]
     let body: [any BlockLevelNode]
+    var scope: ASTScope?
     
     let isIncomplete: Bool
     
@@ -461,6 +472,7 @@ final class FuncApplication: ExpressionNode, TopLevelNode {
     let id = UUID()
     let name: String
     let arguments: [any ExpressionNode]
+    var scope: ASTScope?
     
     let isIncomplete: Bool
     
@@ -483,10 +495,6 @@ final class FuncApplication: ExpressionNode, TopLevelNode {
     func acceptVisitor<V: ASTVisitor>(_ visitor: V, _ info: V.VisitorInfo) -> V.VisitorResult {
         visitor.visitFuncApplication(self, info)
     }
-    
-    func acceptTypeQuery(_ context: ASTContext) {
-        context.queryTypeOfFuncApplication(self)
-    }
 }
 
 final class IfStatement: StatementNode, BlockLevelNode {
@@ -494,6 +502,7 @@ final class IfStatement: StatementNode, BlockLevelNode {
     let condition: any ExpressionNode
     let thenBranch: [any BlockLevelNode]
     let elseBranch: [any BlockLevelNode]?
+    var scope: ASTScope?
     
     let isIncomplete: Bool
     
@@ -523,6 +532,7 @@ final class IfStatement: StatementNode, BlockLevelNode {
 final class ReturnStatement: StatementNode, BlockLevelNode {
     let id = UUID()
     let expression: any ExpressionNode
+    var scope: ASTScope?
     
     let isIncomplete: Bool
     static var incomplete: ReturnStatement {
@@ -548,6 +558,7 @@ final class AssignmentStatement: StatementNode, TopLevelNode {
     let id = UUID()
     let name: String
     let expression: any ExpressionNode
+    var scope: ASTScope?
     
     var isIncomplete: Bool
     static var incomplete: AssignmentStatement {

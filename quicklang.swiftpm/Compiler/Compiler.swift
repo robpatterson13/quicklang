@@ -60,7 +60,6 @@ class Compiler {
         let parseResult: Parser.SuccessfulResult
         switch startParsing(lexResult, settings: settings) {
         case .success(result: let result):
-            print(result.tree)
             parseResult = result
         case .failure:
             onFailure()
