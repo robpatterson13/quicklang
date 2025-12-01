@@ -62,7 +62,7 @@ class InferType: ASTVisitor {
         _ expression: FuncApplication,
         _ info: Void
     ) -> TypeName? {
-        context.getTypeOf(symbol: expression.name)
+        context.getTypeOf(symbol: expression.name)?.returnType
     }
     
     func visitLetDefinition(
@@ -263,7 +263,7 @@ enum TypecheckerErrorType: CompilerPhaseErrorType {
         case .funcArgWrongType(let defined):
             return FuncArgWrongTypeErrorInfo(location: location, definedAs: defined)
         case .funcReturnTypeMismatch(let defined):
-            return FuncArgWrongTypeErrorInfo(location: location, definedAs: defined)
+            return FuncReturnTypeMismatchErrorInfo(location: location, definedAs: defined)
         case .voidCannotReturnValue:
             return VoidCannotReturnValueErrorInfo(location: location)
         case .missingReturnInNonvoidFunc:
@@ -326,7 +326,6 @@ struct FuncArgWrongTypeErrorInfo: TypecheckPhaseErrorInfo {
 struct FuncReturnTypeMismatchErrorInfo: TypecheckPhaseErrorInfo {
     let location: SourceCodeLocation
     let definedAs: TypeName
-    let actuallyIs: TypeName
     
     func getError(from manager: any TypecheckerErrorCreator) -> TypecheckerError {
         manager.funcReturnTypeMismatch(info: self)
