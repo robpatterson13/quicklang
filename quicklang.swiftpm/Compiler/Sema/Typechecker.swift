@@ -195,22 +195,22 @@ class Typechecker: SemaPass, ASTVisitor {
             node.acceptVisitor(self)
         }
         
-        let returnStmt = definition.body.first { $0 is ReturnStatement } as? ReturnStatement
-        let returnType = definition.type.returnType
-        
-        if let returnType, returnStmt == nil && returnType != .Void {
-            addError(.funcReturnTypeMismatch(defined: returnType), at: .beginningOfFile)
-            return
-        }
-        
-        if returnStmt != nil, let returnType, returnType == .Void {
-            addError(.voidCannotReturnValue, at: .beginningOfFile)
-            return
-        }
-        
-        if let returnStmt, let returnType {
-            checkExpression(returnStmt.expression, is: returnType, error: .funcReturnTypeMismatch(defined: returnType))
-        }
+//        let returnStmt = definition.body.first { $0 is ReturnStatement } as? ReturnStatement
+//        let returnType = definition.type.returnType
+//        
+//        if let returnType, returnStmt == nil && returnType != .Void {
+//            addError(.funcReturnTypeMismatch(defined: returnType), at: .beginningOfFile)
+//            return
+//        }
+//        
+//        if returnStmt != nil, let returnType, returnType == .Void {
+//            addError(.voidCannotReturnValue, at: .beginningOfFile)
+//            return
+//        }
+//        
+//        if let returnStmt, let returnType {
+//            checkExpression(returnStmt.expression, is: returnType, error: .funcReturnTypeMismatch(defined: returnType))
+//        }
     }
     
     func visitFuncApplication(_ expression: FuncApplication, _ info: Void) {

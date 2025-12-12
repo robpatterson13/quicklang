@@ -308,6 +308,7 @@ final class ConvertToRawFIR: CompilerPhase, ASTVisitor {
         var blocks: [FIRBasicBlock] = []
         var currentBlockItems: [FIRBasicBlockItem] = []
         var currentLabel: FIRLabelRepresentable = initialLabel
+        var shouldDropTerminator = false
         
         let finishCurrentBlock: (FIRTerminator, Expectation?) -> Void = { [self] terminator, newExpectation in
             let block = onParseTerminator(terminator, label: currentLabel, items: currentBlockItems)
@@ -316,6 +317,7 @@ final class ConvertToRawFIR: CompilerPhase, ASTVisitor {
             currentBlockItems = []
             currentLabel = FIRLabelHole()
             expectation = newExpectation
+            shouldDropTerminator = true
         }
         
         let markLabel: (FIRLabelRepresentable) -> Void = { label in
@@ -339,21 +341,26 @@ final class ConvertToRawFIR: CompilerPhase, ASTVisitor {
                 let elseBasicBlock = parseIntoBasicBlocks(elseBlockRaw, .nextIsLabel)
                 blocks.append(contentsOf: elseBasicBlock)
             }
+            expectation = .nextIsLabel
             markLabel(joinLabel)
         }
         
         result.forEach { node in
             switch node {
             case .statement(let statement):
+                shouldDropTerminator = false
                 currentBlockItems.append(statement)
                 
             case .terminator(let terminator):
+                if shouldDropTerminator { return }
                 finishCurrentBlock(terminator, .nextIsLabel)
                 
             case .label(let label):
+                shouldDropTerminator = false
                 markLabel(label)
                 
             case .ifStatement(let terminator, let thenBlock, let elseBlock, let joinLabel):
+                shouldDropTerminator = false
                 handleIf(terminator, thenBlock, elseBlock, joinLabel)
                 
             case .expression:
