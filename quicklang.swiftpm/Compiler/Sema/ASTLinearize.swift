@@ -266,7 +266,7 @@ class ASTLinearize: SemaPass, ASTVisitor {
     }
 }
 
-fileprivate final class GenSymInfo: @unchecked Sendable {
+final class GenSymInfo: @unchecked Sendable {
     static let singleton = GenSymInfo()
     
     private let lock = NSLock()

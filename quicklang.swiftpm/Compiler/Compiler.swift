@@ -30,6 +30,7 @@ class Compiler {
     private var lexer: Lexer?
     private var parser: Parser?
     private var sema: Sema?
+    private var lowerToFIR: ConvertToRawFIR?
     
     private let errorManager: CompilerErrorManager
     
@@ -77,6 +78,15 @@ class Compiler {
             onFailure()
             return
         }
+        
+        let loweringResult: ConvertToRawFIR.SuccessfulResult
+        switch startLowering(parseResult, settings: settings) {
+        case .success(result: let result):
+            print(result.nodes)
+        case .failure:
+            onFailure()
+            return
+        }
     }
     
     private func startLexing(_ source: Lexer.SourceCode, settings: DriverSettings) -> PhaseResult<Lexer> {
@@ -105,6 +115,15 @@ class Compiler {
         
         let input: Sema.InputType = (context: tree, passes: passes)
         return sema!.begin(input)
+    }
+    
+    private func startLowering(_ context: ASTContext, settings: DriverSettings) -> PhaseResult<ConvertToRawFIR> {
+        if lowerToFIR == nil {
+            lowerToFIR = ConvertToRawFIR(errorManager: errorManager, settings: settings)
+        }
+        
+        let result = lowerToFIR!.begin(context)
+        return result
     }
     
     private func resetPhases() {
