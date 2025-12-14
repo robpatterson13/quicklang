@@ -15,6 +15,7 @@ enum ParserErrorType: CompilerPhaseErrorType {
     case expectedTypeIdentifier(where: ExpectedTypeIdentifierErrorInfo.ErrorType)
     case expectedParameterType
     case expectedIdentifier(in: ExpectedIdentifierErrorInfo.ErrorType)
+    case expectedValidAttribute(in: ExpectedValidAttributeErrorInfo.ErrorType)
     
     // MARK: Expected function-related messages
     case expectedFunctionApplication
@@ -53,6 +54,8 @@ enum ParserErrorType: CompilerPhaseErrorType {
             return ExpectedIdentifierErrorInfo(sourceLocation: location, type: type)
         case .expectedFunctionApplication:
             return ExpectedFunctionApplicationErrorInfo(sourceLocation: location)
+        case .expectedValidAttribute(in: let type):
+            return ExpectedValidAttributeErrorInfo(sourceLocation: location, type: type)
         case .expectedFunctionArgument(got: let type):
             return ExpectedFunctionArgumentErrorInfo(sourceLocation: location, type: type)
         case .internalParserError(type: let type):
@@ -99,6 +102,7 @@ struct ExpectedIdentifierErrorInfo: ParserErrorInfo {
         case functionParameter
         case functionApplication
         case assignmentStatement
+        case attribute
     }
     
     func getError(from manager: any ParserErrorCreator) -> ParserError {
@@ -167,6 +171,19 @@ struct ExpectedFunctionApplicationErrorInfo: ParserErrorInfo {
     
     func getError(from manager: any ParserErrorCreator) -> ParserError {
         return manager.expectedFunctionApplication(info: self)
+    }
+}
+
+struct ExpectedValidAttributeErrorInfo: ParserErrorInfo {
+    
+    let sourceLocation: SourceCodeLocation
+    let type: ErrorType
+    enum ErrorType {
+        case notAnAttribute(String)
+    }
+    
+    func getError(from manager: any ParserErrorCreator) -> ParserError {
+        return manager.expectedValidAttribute(info: self)
     }
 }
 
@@ -346,6 +363,7 @@ protocol ParserErrorCreator {
     func expectedArrowInFunctionDefinition(info: ExpectedArrowInFunctionDefinitionErrorInfo) -> ParserError
     func expectedEqualInAssignment(info: ExpectedEqualInAssignmentErrorInfo) -> ParserError
     func expectedSemicolonToEndStatement(info: ExpectedSemicolonToEndStatementErrorInfo) -> ParserError
+    func expectedValidAttribute(info: ExpectedValidAttributeErrorInfo) -> ParserError
     
     // MARK: Expected function-related grammar messages
     func expectedSemicolonToEndFunctionCall(info: ExpectedSemicolonToEndFunctionCallErrorInfo) -> ParserError

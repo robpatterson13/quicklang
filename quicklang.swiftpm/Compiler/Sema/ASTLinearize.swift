@@ -5,29 +5,13 @@
 //  Created by Rob Patterson on 11/16/25.
 //
 
-// MARK: MAKE THIS PRODUCE THE IR
-// MARK: MAKE THIS PRODUCE THE IR
-// MARK: MAKE THIS PRODUCE THE IR
-// MARK: MAKE THIS PRODUCE THE IR
-// MARK: MAKE THIS PRODUCE THE IR
-// MARK: MAKE THIS PRODUCE THE IR
-// MARK: MAKE THIS PRODUCE THE IR
-// MARK: MAKE THIS PRODUCE THE IR
-// MARK: MAKE THIS PRODUCE THE IR
-// MARK: MAKE THIS PRODUCE THE IR
-// MARK: MAKE THIS PRODUCE THE IR
-// MARK: MAKE THIS PRODUCE THE IR
-// MARK: MAKE THIS PRODUCE THE IR
-// MARK: MAKE THIS PRODUCE THE IR
-// MARK: MAKE THIS PRODUCE THE IR
-// MARK: MAKE THIS PRODUCE THE IR
-
 import Foundation
 
 class ASTLinearize: SemaPass, ASTVisitor {
     
     func begin(reportingTo: CompilerErrorManager) {
-        context.tree = linearize(context.tree)
+        let linearized = linearize(context.tree)
+        context.changeAST(linearized)
     }
     
     let context: ASTContext
@@ -40,7 +24,7 @@ class ASTLinearize: SemaPass, ASTVisitor {
         case node(any ASTNode)
         case id(IdentifierExpression)
     }
-    typealias NewBindingInfo = (LinearizedNodeResult, [any DefinitionNode])
+    typealias NewBindingInfo = (LinearizedNodeResult, [DefinitionNode])
     
     private func unwrap(linearized: LinearizedNodeResult) -> (any ASTNode) {
         switch linearized {
@@ -53,13 +37,13 @@ class ASTLinearize: SemaPass, ASTVisitor {
     
     private func getNodeAndBindings<N: ExpressionNode>(
         expression: N,
-        _ existingBindings: [any DefinitionNode]? = nil
-    ) -> ((any ExpressionNode), [any DefinitionNode]) {
+        _ existingBindings: [DefinitionNode]? = nil
+    ) -> ((any ExpressionNode), [DefinitionNode]) {
         
         let (linearized, bindings) = expression.acceptVisitor(self)
         let newExpr = unwrap(linearized: linearized)
         
-        let newBindings: [any DefinitionNode]
+        let newBindings: [DefinitionNode]
         if let existingBindings {
             newBindings = bindings + existingBindings
         } else {
@@ -100,7 +84,7 @@ class ASTLinearize: SemaPass, ASTVisitor {
         
         let newName = GenSymInfo.singleton.genSym(root: "unary_op", id: operation.id)
         let newOperation = UnaryOperation(op: operation.op, expression: newExpr)
-        let newBinding = LetDefinition(name: newName, type: .Bool, expression: newOperation)
+        let newBinding = DefinitionNode(name: newName, type: .Bool, expression: newOperation, isImmutable: true)
         newBindings.append(newBinding)
         
         let newIdentifierExpr = IdentifierExpression(name: newName)
@@ -118,7 +102,7 @@ class ASTLinearize: SemaPass, ASTVisitor {
         
         let newName = GenSymInfo.singleton.genSym(root: "binary_op", id: operation.id)
         let newOperation = BinaryOperation(op: operation.op, lhs: newLhs, rhs: newRhs)
-        let newBinding = LetDefinition(name: newName, type: .Bool, expression: newOperation)
+        let newBinding = DefinitionNode(name: newName, type: .Bool, expression: newOperation, isImmutable: true)
         newBindings.append(newBinding)
         
         let newIdentifierExpr = IdentifierExpression(name: newName)
@@ -127,34 +111,13 @@ class ASTLinearize: SemaPass, ASTVisitor {
         return (result, newBindings)
     }
     
-    func visitLetDefinition(
-        _ definition: LetDefinition,
+    func visitDefinition(
+        _ definition: DefinitionNode,
         _ info: Void
-    ) -> NewBindingInfo {
-        visitDefinition(definition)
-    }
-    
-    func visitVarDefinition(
-        _ definition: VarDefinition,
-        _ info: Void
-    ) -> NewBindingInfo {
-        visitDefinition(definition)
-    }
-    
-    private func visitDefinition<T: DefinitionNode>(
-        _ definition: T
     ) -> NewBindingInfo {
         let (newExpr, newBindings) = getNodeAndBindings(expression: definition.expression)
         
-        let newDefinition: any DefinitionNode
-        switch definition {
-        case is LetDefinition:
-            newDefinition = LetDefinition(name: definition.name, type: .Bool, expression: newExpr)
-        case is VarDefinition:
-            newDefinition = VarDefinition(name: definition.name, type: .Bool, expression: newExpr)
-        default:
-            fatalError("not possible")
-        }
+        let newDefinition = DefinitionNode(name: definition.name, type: .Bool, expression: newExpr, isImmutable: true)
         
         let result = LinearizedNodeResult.node(newDefinition)
         return (result, newBindings)
@@ -169,7 +132,8 @@ class ASTLinearize: SemaPass, ASTVisitor {
             name: definition.name,
             type: definition.type,
             parameters: definition.parameters,
-            body: newBody
+            body: newBody,
+            isEntry: definition.isEntry
         )
         
         let result = LinearizedNodeResult.node(newFuncDef)
@@ -180,7 +144,7 @@ class ASTLinearize: SemaPass, ASTVisitor {
         _ expression: FuncApplication,
         _ info: Void
     ) -> NewBindingInfo {
-        var bindings = [any DefinitionNode]()
+        var bindings = [DefinitionNode]()
         var args = [any ExpressionNode]()
         expression.arguments.forEach { arg in
             let (newArg, newArgBindings) = getNodeAndBindings(expression: arg, bindings)
@@ -190,7 +154,7 @@ class ASTLinearize: SemaPass, ASTVisitor {
         
         let newName = GenSymInfo.singleton.genSym(root: "func_app", id: expression.id)
         let newExpr = FuncApplication(name: expression.name, arguments: args)
-        let newBinding = LetDefinition(name: newName, type: .Bool, expression: newExpr)
+        let newBinding = DefinitionNode(name: newName, type: .Bool, expression: newExpr, isImmutable: true)
         bindings.append(newBinding)
         
         let newIdentifierExpr = LinearizedNodeResult.id(IdentifierExpression(name: newName))
@@ -256,9 +220,8 @@ class ASTLinearize: SemaPass, ASTVisitor {
         var transformedSections: [any TopLevelNode] = []
         
         sections.forEach { section in
-            let (linearized, bindings) = section.acceptVisitor(self)
+            let (linearized, _) = section.acceptVisitor(self)
             let result = unwrap(linearized: linearized) as! any TopLevelNode
-            transformedSections.append(contentsOf: bindings)
             transformedSections.append(result)
         }
         

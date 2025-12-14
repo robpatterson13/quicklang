@@ -52,15 +52,8 @@ class IsGlobalSymbol: ASTVisitor {
         nil
     }
     
-    func visitLetDefinition(
-        _ definition: LetDefinition,
-        _ info: Void
-    ) -> ASTScope.IntroducedBinding? {
-        .definition(definition)
-    }
-    
-    func visitVarDefinition(
-        _ definition: VarDefinition,
+    func visitDefinition(
+        _ definition: DefinitionNode,
         _ info: Void
     ) -> ASTScope.IntroducedBinding? {
         .definition(definition)
@@ -104,12 +97,36 @@ class IsGlobalSymbol: ASTVisitor {
 
 class ASTContext {
     
-    var tree: TopLevel
+    var rawTree: RawTopLevel
+    
+    private var _tree: TopLevel?
+    var tree: TopLevel {
+        if let _tree { return _tree }
+        
+        fatalError("The AST cannot be accessed before desugaring")
+    }
     
     var symbols: [String: TypeName] = [:]
     
-    init(tree: TopLevel = TopLevel(sections: [])) {
-        self.tree = tree
+    init(rawTree: RawTopLevel = RawTopLevel(sections: [])) {
+        self.rawTree = rawTree
+        self._tree = nil
+    }
+    
+    func finishDesugaredAST(tree: TopLevel) {
+        guard _tree == nil else {
+            fatalError("Can only finish desugaring once; use the changing version")
+        }
+        
+        _tree = tree
+    }
+    
+    func changeAST(_ tree: TopLevel) {
+        guard _tree != nil else {
+            fatalError("Can only change AST once desugaring is done")
+        }
+        
+        _tree = tree
     }
     
     func allGlobals(excluding: (any TopLevelNode)? = nil) -> [ASTScope.IntroducedBinding] {

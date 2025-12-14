@@ -18,7 +18,7 @@ final class ASTScope {
     enum IntroducedBinding {
         case funcParameter(FuncDefinition.Parameter)
         case function(FuncDefinition)
-        case definition(any DefinitionNode)
+        case definition(DefinitionNode)
         
         var identifiableName: IdentifiableName {
             switch self {

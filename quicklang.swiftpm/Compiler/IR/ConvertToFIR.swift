@@ -139,28 +139,14 @@ final class ConvertToRawFIR: CompilerPhase, ASTVisitor {
         return .expression(binaryExpression)
     }
     
-    private func visitDefinition<D: DefinitionNode>(
-        _ statement: D,
+    func visitDefinition(
+        _ definition: DefinitionNode,
         _ info: FIRVisitInfo
     ) -> FIRVisitResult {
-        let value = statement.expression.acceptVisitor(self, info)
-        let definition = FIRAssignment(name: statement.name, value: value.unwrapExpression())
+        let value = definition.expression.acceptVisitor(self, info)
+        let assignment = FIRAssignment(name: definition.name, value: value.unwrapExpression())
         
-        return .statement(definition)
-    }
-    
-    func visitLetDefinition(
-        _ definition: LetDefinition,
-        _ info: FIRVisitInfo
-    ) -> FIRVisitResult {
-        visitDefinition(definition, info)
-    }
-    
-    func visitVarDefinition(
-        _ definition: VarDefinition,
-        _ info: FIRVisitInfo
-    ) -> FIRVisitResult {
-        visitDefinition(definition, info)
+        return .statement(assignment)
     }
     
     func visitFuncDefinition(
@@ -175,7 +161,7 @@ final class ConvertToRawFIR: CompilerPhase, ASTVisitor {
             return .init(name: param.name, type: .convertFrom(param.type))
         }
         
-        let entryLabel = FIRLabel(name: "\(definition)$entry_")
+        let entryLabel = FIRLabel(name: "\(definition.name)$entry")
         let parsedBody = parseIntoBasicBlocks(body, nil, entryLabel)
         
         return .function(

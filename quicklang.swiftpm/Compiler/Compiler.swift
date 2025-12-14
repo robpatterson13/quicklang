@@ -62,6 +62,7 @@ class Compiler {
         switch startParsing(lexResult, settings: settings) {
         case .success(result: let result):
             parseResult = result
+            dump(result.rawTree)
         case .failure:
             onFailure()
             return
@@ -72,7 +73,7 @@ class Compiler {
         switch startSema(passes: Sema.defaultPasses, parseResult, settings: settings) {
         case .success(result: let result):
             if let result {
-                print(result.tree)
+                dump(result.tree)
             }
         case .failure:
             onFailure()
@@ -82,7 +83,9 @@ class Compiler {
         let loweringResult: ConvertToRawFIR.SuccessfulResult
         switch startLowering(parseResult, settings: settings) {
         case .success(result: let result):
-            print(result.nodes)
+            for node in result.nodes {
+                dump(node)
+            }
         case .failure:
             onFailure()
             return

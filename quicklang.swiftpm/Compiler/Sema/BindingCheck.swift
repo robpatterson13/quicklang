@@ -56,15 +56,8 @@ class AllowsRecursiveDefinition: ASTVisitor {
         .notApplicable
     }
     
-    func visitLetDefinition(
-        _ definition: LetDefinition,
-        _ info: Void
-    ) -> Verdict {
-        .no
-    }
-    
-    func visitVarDefinition(
-        _ definition: VarDefinition,
+    func visitDefinition(
+        _ definition: DefinitionNode,
         _ info: Void
     ) -> Verdict {
         .no
@@ -153,15 +146,8 @@ class SymbolGrabber: ASTVisitor {
         return []
     }
     
-    func visitLetDefinition(
-        _ definition: LetDefinition,
-        _ info: Void
-    ) -> [Binding] {
-        return [definition.name]
-    }
-    
-    func visitVarDefinition(
-        _ definition: VarDefinition,
+    func visitDefinition(
+        _ definition: DefinitionNode,
         _ info: Void
     ) -> [Binding] {
         return [definition.name]
@@ -272,16 +258,8 @@ class BindingCheck: SemaPass, ASTVisitor {
         operation.rhs.acceptVisitor(self, info)
     }
     
-    func visitLetDefinition(
-        _ definition: LetDefinition,
-        _ info: Void
-    ) {
-        enforceNoShadowing(for: .definition(definition))
-        definition.expression.acceptVisitor(self, info)
-    }
-    
-    func visitVarDefinition(
-        _ definition: VarDefinition,
+    func visitDefinition(
+        _ definition: DefinitionNode,
         _ info: Void
     ) {
         enforceNoShadowing(for: .definition(definition))

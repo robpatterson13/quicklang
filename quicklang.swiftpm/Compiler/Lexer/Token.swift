@@ -81,6 +81,8 @@ enum Token {
 
 extension Token {
     
+    static let AT: Token = .buildSymbol("@")
+    
     static let PLUS: Token = .buildSymbol("+")
     static let MINUS: Token = .buildSymbol("-")
     static let STAR: Token = .buildSymbol("*")

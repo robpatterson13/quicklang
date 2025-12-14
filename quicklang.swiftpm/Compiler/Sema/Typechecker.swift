@@ -65,15 +65,8 @@ class InferType: ASTVisitor {
         context.getTypeOf(symbol: expression.name)?.returnType
     }
     
-    func visitLetDefinition(
-        _ definition: LetDefinition,
-        _ info: Void
-    ) -> TypeName? {
-        nil
-    }
-    
-    func visitVarDefinition(
-        _ definition: VarDefinition,
+    func visitDefinition(
+        _ definition: DefinitionNode,
         _ info: Void
     ) -> TypeName? {
         nil
@@ -175,15 +168,7 @@ class Typechecker: SemaPass, ASTVisitor {
         operation.rhs.acceptVisitor(self)
     }
     
-    func visitLetDefinition(_ definition: LetDefinition, _ info: Void) {
-        checkDefinition(definition)
-    }
-    
-    func visitVarDefinition(_ definition: VarDefinition, _ info: Void) {
-        checkDefinition(definition)
-    }
-    
-    private func checkDefinition(_ definition: any DefinitionNode) {
+    func visitDefinition(_ definition: DefinitionNode, _ info: Void) {
         let type = definition.type
         checkExpression(definition.expression, is: type, error: .typeMismatchInDefinition(defined: type))
         

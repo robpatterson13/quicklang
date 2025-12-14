@@ -32,15 +32,10 @@ protocol ASTVisitor {
     func visitBinaryOperation(
         _ operation: BinaryOperation,
         _ info: VisitorInfo
-    ) -> VisitorResult 
+    ) -> VisitorResult
     
-    func visitLetDefinition(
-        _ definition: LetDefinition,
-        _ info: VisitorInfo
-    ) -> VisitorResult 
-    
-    func visitVarDefinition(
-        _ definition: VarDefinition,
+    func visitDefinition(
+        _ definition: DefinitionNode,
         _ info: VisitorInfo
     ) -> VisitorResult 
     
@@ -67,5 +62,5 @@ protocol ASTVisitor {
     func visitAssignmentStatement(
         _ statement: AssignmentStatement,
         _ info: VisitorInfo
-    ) -> VisitorResult 
+    ) -> VisitorResult
 }

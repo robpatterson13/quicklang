@@ -47,15 +47,8 @@ final class BuildSymbolTable: SemaPass {
         _ info: Void
     ) {}
     
-    func visitLetDefinition(
-        _ definition: LetDefinition,
-        _ info: Void
-    ) {
-        context.assignTypeOf(definition.type, to: definition.name)
-    }
-    
-    func visitVarDefinition(
-        _ definition: VarDefinition,
+    func visitDefinition(
+        _ definition: DefinitionNode,
         _ info: Void
     ) {
         context.assignTypeOf(definition.type, to: definition.name)

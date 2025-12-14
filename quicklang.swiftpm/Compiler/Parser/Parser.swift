@@ -23,14 +23,14 @@ final class Parser: CompilerPhase {
     }
     
     func begin(_ input: Lexer.SuccessfulResult) -> PhaseResult<Parser> {
-        var nodes: [any TopLevelNode] = []
+        var nodes: [any RawTopLevelNode] = []
         self.tokens = PeekableIterator(elements: input)
         while !tokens.isEmpty() {
             let node = parseTopLevel()
             nodes.append(node)
         }
         
-        context.tree = TopLevel(sections: nodes)
+        context.rawTree = RawTopLevel(sections: nodes)
         if errorManager.hasErrors {
             return .failure
         }
@@ -121,7 +121,7 @@ final class Parser: CompilerPhase {
         }
     }
     
-    private func parseTopLevel() -> any TopLevelNode {
+    private func parseTopLevel() -> any RawTopLevelNode {
         
         let currentToken: Token
         let result = expect(else: .expectedTopLevelStatement(got: .eof))
@@ -130,39 +130,74 @@ final class Parser: CompilerPhase {
             currentToken = token
         case .failure(let strategy):
             recover(using: strategy)
-            return TopLevelNodeIncomplete.incomplete
+            return RawTopLevelNodeIncomplete.incomplete
         }
         
         switch currentToken {
         case .Keyword("func", _):
             return parseFunctionDefinition()
             
-        case .Keyword("var", _), .Keyword("let", _):
-            return parseDefinition()
-            
-        case .Identifier:
-            return parseTopLevelIdentifier()
+        case .Symbol("@", _):
+            return parseAttributedConstruct()
             
         case .Boolean:
             let strategy = self.error(.expectedTopLevelStatement(got: .boolean))
             recover(using: strategy)
-            return TopLevelNodeIncomplete.incomplete
+            return RawTopLevelNodeIncomplete.incomplete
             
         case .Number:
             let strategy =  self.error(.expectedTopLevelStatement(got: .number))
             recover(using: strategy)
-            return TopLevelNodeIncomplete.incomplete
+            return RawTopLevelNodeIncomplete.incomplete
+            
+        case .Identifier(let val, _):
+            let strategy = self.error(.expectedTopLevelStatement(got: .identifier(val)))
+            recover(using: strategy)
+            return RawTopLevelNodeIncomplete.incomplete
             
         case .Keyword(let val, _):
             let strategy = self.error(.expectedTopLevelStatement(got: .keyword(val)))
             recover(using: strategy)
-            return TopLevelNodeIncomplete.incomplete
+            return RawTopLevelNodeIncomplete.incomplete
             
         case .Symbol(let val, _):
             let strategy = self.error(.expectedTopLevelStatement(got: .symbol(val)))
             recover(using: strategy)
-            return TopLevelNodeIncomplete.incomplete
+            return RawTopLevelNodeIncomplete.incomplete
         }
+    }
+    
+    private func parseAttributedConstruct() -> RawAttributedNode {
+        let recoverFromAtMissing = consume(
+            .AT,
+            else: .internalParserError(type: .unreachable("Can only be called when @ is encountered"))
+        )
+        if let recoverFromAtMissing {
+            recover(using: recoverFromAtMissing)
+            return .incomplete
+        }
+        
+        guard let identifier = parseIdentifier(in: .assignmentStatement) else {
+            return .incomplete
+        }
+        
+        let attribute: RawAttributedNode.AttributeName
+        switch identifier {
+        case "main":
+            attribute = .main
+            
+        default:
+            let recoverFromNonexistantAttribute = self.error(.expectedValidAttribute(in: .notAnAttribute(identifier)))
+            recover(using: recoverFromNonexistantAttribute)
+            return .incomplete
+        }
+        
+        let functionDefinition = parseFunctionDefinition()
+        guard !functionDefinition.anyIncomplete else {
+            return .incomplete
+        }
+        
+        return RawAttributedNode(attribute: attribute, node: functionDefinition)
     }
     
     private enum ParseIdentifierErrorType {
@@ -211,7 +246,7 @@ final class Parser: CompilerPhase {
     private func errorFromParseIdentifierStart(
         got type: ParseIdentifierErrorType,
         at site: IdentifierSite
-    ) -> any BlockLevelNode {
+    ) -> any RawBlockLevelNode {
         
         let error: ParserErrorType
         switch site {
@@ -225,9 +260,9 @@ final class Parser: CompilerPhase {
         
         switch site {
         case .topLevel:
-            return TopLevelNodeIncomplete.incomplete
+            return RawTopLevelNodeIncomplete.incomplete
         case .block:
-            return BlockLevelNodeIncomplete.incomplete
+            return RawBlockLevelNodeIncomplete.incomplete
         }
     }
     
@@ -236,7 +271,7 @@ final class Parser: CompilerPhase {
         case block
     }
     
-    private func parseIdentifierStart(in site: IdentifierSite) -> any BlockLevelNode {
+    private func parseIdentifierStart(in site: IdentifierSite) -> any RawBlockLevelNode {
         guard let twoAhead = tokens.peek(ahead: 2) else {
             return errorFromParseIdentifierStart(got: .eof, at: site)
         }
@@ -270,23 +305,23 @@ final class Parser: CompilerPhase {
         }
     }
     
-    private func parseTopLevelIdentifier() -> any TopLevelNode {
-        return parseIdentifierStart(in: .topLevel) as! any TopLevelNode
+    private func parseTopLevelIdentifier() -> any RawTopLevelNode {
+        return parseIdentifierStart(in: .topLevel) as! any RawTopLevelNode
     }
     
-    private func parseBlockLevelIdentifier() -> any BlockLevelNode {
+    private func parseBlockLevelIdentifier() -> any RawBlockLevelNode {
         return parseIdentifierStart(in: .block)
     }
     
-    private func parseAssignmentStatement() -> AssignmentStatement {
+    private func parseAssignmentStatement() -> RawAssignmentStatement {
         guard let identifier = parseIdentifier(in: .assignmentStatement) else {
-            return AssignmentStatement.incomplete
+            return RawAssignmentStatement.incomplete
         }
         
         let recoverFromEqualMissing = consume(.EQUAL, else: .expectedEqualInAssignment)
         if let recoverFromEqualMissing {
             recover(using: recoverFromEqualMissing)
-            return AssignmentStatement.incomplete
+            return RawAssignmentStatement.incomplete
         }
         
         let expressionNode = parseExpression(until: ";", min: 0)
@@ -296,10 +331,10 @@ final class Parser: CompilerPhase {
             recover(using: recoverFromSemicolonMissing)
         }
         
-        return AssignmentStatement(name: identifier, expression: expressionNode)
+        return RawAssignmentStatement(name: identifier, expression: expressionNode)
     }
     
-    private func parseFunctionDefinition() -> FuncDefinition {
+    private func parseFunctionDefinition() -> RawFuncDefinition {
         
         let recoverFromFuncKeywordMissing = consume(
             .FUNC,
@@ -342,14 +377,14 @@ final class Parser: CompilerPhase {
         }
         
         let parameterTypes = parameters.map { $0.type }
-        let funcType: TypeName = .Arrow(from: parameterTypes, to: typeName)
+        let funcType: RawTypeName = .Arrow(from: parameterTypes, to: typeName)
         
         let body = parseBlock(in: .functionBody)
         if body.anyIncomplete {
             return .incomplete
         }
         
-        return FuncDefinition(name: identifier, type: funcType, parameters: parameters, body: body)
+        return RawFuncDefinition(name: identifier, type: funcType, parameters: parameters, body: body)
     }
     
     private enum BlockContext {
@@ -375,14 +410,14 @@ final class Parser: CompilerPhase {
         }
     }
     
-    private func parseBlock(in usage: BlockContext) -> [any BlockLevelNode] {
+    private func parseBlock(in usage: BlockContext) -> [any RawBlockLevelNode] {
         
-        var bodyParts: [any BlockLevelNode] = []
+        var bodyParts: [any RawBlockLevelNode] = []
         
         let recoverFromLBraceMissing = consume(.LBRACE, else: .expectedLeftBrace(where: usage.errorTypeForLeft))
         if let recoverFromLBraceMissing {
             recover(using: recoverFromLBraceMissing)
-            return [FuncApplication.incomplete]
+            return [RawFuncApplication.incomplete]
         }
         
         while let nextToken = tokens.peekNext(), nextToken != .RBRACE {
@@ -395,13 +430,13 @@ final class Parser: CompilerPhase {
         let recoverFromRBraceMissing = consume(.RBRACE, else: .expectedRightBrace(where: usage.errorTypeForRight))
         if let recoverFromRBraceMissing {
             recover(using: recoverFromRBraceMissing)
-            bodyParts.append(FuncApplication.incomplete)
+            bodyParts.append(RawFuncApplication.incomplete)
         }
         
         return bodyParts
     }
     
-    private func parseIfStatement() -> IfStatement {
+    private func parseIfStatement() -> RawIfStatement {
         
         let recoverFromIfKeywordMissing = consume(
             .IF,
@@ -418,14 +453,8 @@ final class Parser: CompilerPhase {
             return .incomplete
         }
         
-        let condition = parseExpression(until: ")", min: 0)
+        let condition = parseExpression(until: "{", min: 0)
         guard !condition.isIncomplete else {
-            return .incomplete
-        }
-        
-        let recoverFromRParenMissing = consume(.RPAREN, else: .expectedRightParen(where: .ifStatement))
-        if let recoverFromRParenMissing {
-            recover(using: recoverFromRParenMissing)
             return .incomplete
         }
         
@@ -435,7 +464,7 @@ final class Parser: CompilerPhase {
         }
         
         guard let token = tokens.peekNext(), token == .ELSE else {
-            return IfStatement(condition: condition, thenBranch: thnBlock, elseBranch: nil)
+            return RawIfStatement(condition: condition, thenBranch: thnBlock, elseBranch: nil)
         }
         
         tokens.burn() // else
@@ -445,10 +474,10 @@ final class Parser: CompilerPhase {
             return .incomplete
         }
         
-        return IfStatement(condition: condition, thenBranch: thnBlock, elseBranch: elsBlock)
+        return RawIfStatement(condition: condition, thenBranch: thnBlock, elseBranch: elsBlock)
     }
     
-    private func parseReturnStatement() -> ReturnStatement {
+    private func parseReturnStatement() -> RawReturnStatement {
         
         let recoverFromReturnKeywordMissing = consume(
             .RETURN,
@@ -459,7 +488,7 @@ final class Parser: CompilerPhase {
             return .incomplete
         }
         
-        let node = ReturnStatement(expression: parseExpression(until: ";", min: 0))
+        let node = RawReturnStatement(expression: parseExpression(until: ";", min: 0))
         
         let recoverFromSemicolonMissing = consume(.SEMICOLON, else: .expectedSemicolonToEndStatement(of: .return))
         if let recoverFromSemicolonMissing {
@@ -469,7 +498,7 @@ final class Parser: CompilerPhase {
         return node
     }
     
-    private func parseBlockBodyPart() -> (any BlockLevelNode)? {
+    private func parseBlockBodyPart() -> (any RawBlockLevelNode)? {
         
         let currentToken: Token
         let result = expect(else: .expectedBlockBodyPart(got: .eof))
@@ -478,7 +507,7 @@ final class Parser: CompilerPhase {
             currentToken = token
         case .failure(let strategy):
             recover(using: strategy)
-            return BlockLevelNodeIncomplete.incomplete
+            return RawBlockLevelNodeIncomplete.incomplete
         }
         
         switch currentToken {
@@ -500,27 +529,27 @@ final class Parser: CompilerPhase {
         case .Boolean:
             let strategy = self.error(.expectedBlockBodyPart(got: .boolean))
             recover(using: strategy)
-            return BlockLevelNodeIncomplete.incomplete
+            return RawBlockLevelNodeIncomplete.incomplete
             
         case .Number:
             let strategy = self.error(.expectedBlockBodyPart(got: .number))
             recover(using: strategy)
-            return BlockLevelNodeIncomplete.incomplete
+            return RawBlockLevelNodeIncomplete.incomplete
             
         case .Keyword(let val, _):
             let strategy = self.error(.expectedBlockBodyPart(got: .keyword(val)))
             recover(using: strategy)
-            return BlockLevelNodeIncomplete.incomplete
+            return RawBlockLevelNodeIncomplete.incomplete
             
         case .Symbol(let val, _):
             let strategy = self.error(.expectedBlockBodyPart(got: .symbol(val)))
             recover(using: strategy)
-            return BlockLevelNodeIncomplete.incomplete
+            return RawBlockLevelNodeIncomplete.incomplete
             
         }
     }
     
-    private func parseDefinition() -> any DefinitionNode {
+    private func parseDefinition() -> any RawDefinitionNode {
         
         let keyword: Token
         let result = expect(else: .internalParserError(type: .unreachable("There should be a keyword here")), burnToken: true)
@@ -529,7 +558,7 @@ final class Parser: CompilerPhase {
             keyword = token
         case .failure(let strategy):
             recover(using: strategy)
-            return LetDefinition.incomplete
+            return RawLetDefinition.incomplete
         }
         
         let definitionType: DefinitionType
@@ -550,28 +579,28 @@ final class Parser: CompilerPhase {
                 )
             )
             recover(using: strategy)
-            return LetDefinition.incomplete
+            return RawLetDefinition.incomplete
         }
         
         guard let identifier = parseIdentifier(in: .valueDefinition) else {
-            return LetDefinition.incomplete
+            return RawLetDefinition.incomplete
         }
         
         let recoverFromColonMissing = consume(.COLON, else: .expectedTypeIdentifier(where: .definitionType))
         if let recoverFromColonMissing {
             recover(using: recoverFromColonMissing)
-            return LetDefinition.incomplete
+            return RawLetDefinition.incomplete
         }
         
         let type = parseType(at: .definitionType)
         guard let type else {
-            return LetDefinition.incomplete
+            return RawLetDefinition.incomplete
         }
         
         let recoverFromEqualMissing = consume(.EQUAL, else: .expectedEqualInAssignment)
         if let recoverFromEqualMissing {
             recover(using: recoverFromEqualMissing)
-            return LetDefinition.incomplete
+            return RawLetDefinition.incomplete
         }
         
         let boundExpression = parseExpression(until: ";", min: 0)
@@ -583,13 +612,13 @@ final class Parser: CompilerPhase {
         
         switch definitionType {
         case .var:
-            return VarDefinition(name: identifier, type: type, expression: boundExpression)
+            return RawVarDefinition(name: identifier, type: type, expression: boundExpression)
         case .let:
-            return LetDefinition(name: identifier, type: type, expression: boundExpression)
+            return RawLetDefinition(name: identifier, type: type, expression: boundExpression)
         }
     }
     
-    private func parseExpressionBeginning() -> any ExpressionNode {
+    private func parseExpressionBeginning() -> any RawExpressionNode {
         
         let currentToken: Token
         let result = expect(else: .expectedExpression)
@@ -598,7 +627,7 @@ final class Parser: CompilerPhase {
             currentToken = token
         case .failure(let strategy):
             recover(using: strategy)
-            return NumberExpression.incomplete
+            return RawNumberExpression.incomplete
         }
         
         switch currentToken {
@@ -607,25 +636,25 @@ final class Parser: CompilerPhase {
                 return parseFunctionApplication()
             } else {
                 tokens.burn()
-                return IdentifierExpression(name: id)
+                return RawIdentifierExpression(name: id)
             }
             
         case let .Number(n, _):
             tokens.burn()
-            return NumberExpression(value: Int(n)!)
+            return RawNumberExpression(value: Int(n)!)
             
         case let .Boolean(b, _):
             tokens.burn()
-            return BooleanExpression(value: Bool(b)!)
+            return RawBooleanExpression(value: Bool(b)!)
             
         default:
             let strategy = self.error(.expectedExpression)
             recover(using: strategy)
-            return NumberExpression.incomplete
+            return RawNumberExpression.incomplete
         }
     }
     
-    private func parseExpression(until end: String, min: Int) -> any ExpressionNode {
+    private func parseExpression(until end: String, min: Int) -> any RawExpressionNode {
         
         var lhsNode = parseExpressionBeginning()
         if lhsNode.isIncomplete {
@@ -640,7 +669,7 @@ final class Parser: CompilerPhase {
             guard let op = tokens.peekNext(), op.isOp() else {
                 let strategy = self.error(.expectedOperator)
                 recover(using: strategy)
-                return NumberExpression.incomplete
+                return RawNumberExpression.incomplete
             }
             
             let (lBp, rBp) = op.bindingPower
@@ -655,23 +684,23 @@ final class Parser: CompilerPhase {
                 return rhsNode
             }
             
-            var opVal: BinaryOperation.Operator
+            var opVal: RawBinaryOperation.Operator
             switch op.value {
             case "+":
-                opVal = BinaryOperation.Operator.plus
+                opVal = RawBinaryOperation.Operator.plus
             case "-":
-                opVal = BinaryOperation.Operator.minus
+                opVal = RawBinaryOperation.Operator.minus
             case "*":
-                opVal = BinaryOperation.Operator.times
+                opVal = RawBinaryOperation.Operator.times
             case "&&":
-                opVal = BinaryOperation.Operator.and
+                opVal = RawBinaryOperation.Operator.and
             case "||":
-                opVal = BinaryOperation.Operator.or
+                opVal = RawBinaryOperation.Operator.or
             default:
                 fatalError() // TODO: unreachable with current grammar
             }
             
-            lhsNode = BinaryOperation(op: opVal, lhs: lhsNode, rhs: rhsNode)
+            lhsNode = RawBinaryOperation(op: opVal, lhs: lhsNode, rhs: rhsNode)
         }
         
         return lhsNode
@@ -701,9 +730,9 @@ final class Parser: CompilerPhase {
         }
     }
     
-    private func parseFunctionParameters() -> [FuncDefinition.Parameter] {
+    private func parseFunctionParameters() -> [RawFuncDefinition.Parameter] {
         
-        var parameters: [FuncDefinition.Parameter] = []
+        var parameters: [RawFuncDefinition.Parameter] = []
         
         while let nextToken = tokens.peekNext(), nextToken != .RPAREN {
             
@@ -744,7 +773,7 @@ final class Parser: CompilerPhase {
         return parameters
     }
     
-    private func parseFunctionApplicationArgument() -> any ExpressionNode {
+    private func parseFunctionApplicationArgument() -> any RawExpressionNode {
         
         let nextToken: Token
         let result = expect(else: .expectedFunctionArgument(got: .eof))
@@ -753,7 +782,7 @@ final class Parser: CompilerPhase {
             nextToken = token
         case .failure(let strategy):
             recover(using: strategy)
-            return NumberExpression.incomplete
+            return RawNumberExpression.incomplete
         }
         
         switch nextToken {
@@ -762,15 +791,15 @@ final class Parser: CompilerPhase {
         case .Keyword(let kw, _):
             let strategy = self.error(.expectedFunctionArgument(got: .keyword(kw)))
             recover(using: strategy)
-            return NumberExpression.incomplete
+            return RawNumberExpression.incomplete
         case .Symbol(let s, _):
             let strategy = self.error(.expectedFunctionArgument(got: .symbol(s)))
             recover(using: strategy)
-            return NumberExpression.incomplete
+            return RawNumberExpression.incomplete
         }
     }
     
-    private func parseTopLevelFunctionApplication() -> FuncApplication {
+    private func parseTopLevelFunctionApplication() -> RawFuncApplication {
         let functionApplication = parseFunctionApplication()
         
         let recoverFromSemicolonMissing = consume(.SEMICOLON, else: .expectedSemicolonToEndFunctionCall)
@@ -781,7 +810,7 @@ final class Parser: CompilerPhase {
         return functionApplication
     }
     
-    private func parseFunctionApplication() -> FuncApplication {
+    private func parseFunctionApplication() -> RawFuncApplication {
         
         let identifier = parseIdentifier(in: .functionApplication)
         guard let identifier else {
@@ -794,7 +823,7 @@ final class Parser: CompilerPhase {
             return .incomplete
         }
         
-        var expressions: [any ExpressionNode] = []
+        var expressions: [any RawExpressionNode] = []
         
         while let nextToken = tokens.peekNext(), nextToken != .RPAREN {
             let argument = parseFunctionApplicationArgument()
@@ -819,12 +848,12 @@ final class Parser: CompilerPhase {
             return .incomplete
         }
         
-        return FuncApplication(name: identifier, arguments: expressions)
+        return RawFuncApplication(name: identifier, arguments: expressions)
     }
     
     typealias TypeLocation = ExpectedTypeIdentifierErrorInfo.ErrorType
     
-    private func parseType(at location: TypeLocation) -> TypeName? {
+    private func parseType(at location: TypeLocation) -> RawTypeName? {
         
         let nextToken: Token
         let result = expect(else: .expectedTypeIdentifier(where: location), burnToken: true)
@@ -850,3 +879,4 @@ final class Parser: CompilerPhase {
         }
     }
 }
+

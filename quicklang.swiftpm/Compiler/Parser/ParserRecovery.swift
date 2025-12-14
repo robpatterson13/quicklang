@@ -50,6 +50,12 @@ class DefaultRecovery: RecoveryEngine {
         .dropUntilEndOfFunction
     }
     
+    private func expectedValidAttribute(
+        _ info: ExpectedValidAttributeErrorInfo.ErrorType
+    ) -> RecoveryStrategy {
+        .unrecoverable
+    }
+    
     private func expectedIdentifier(
         _ info: ExpectedIdentifierErrorInfo.ErrorType
     ) -> RecoveryStrategy {
@@ -58,6 +64,8 @@ class DefaultRecovery: RecoveryEngine {
             return .dropUntilEndOfFunction
         case .valueDefinition, .functionApplication, .assignmentStatement:
             return .dropUntilEndOfStatement
+        case .attribute:
+            return .unrecoverable
         }
     }
     
@@ -215,6 +223,8 @@ class DefaultRecovery: RecoveryEngine {
             return expectedTopLevelStatement(info)
         case .expectedBlockBodyPart(got: let info):
             return expectedBlockBodyPart(info)
+        case .expectedValidAttribute(in: let info):
+            return expectedValidAttribute(info)
         }
     }
 }

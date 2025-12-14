@@ -7,13 +7,7 @@
 
 import Foundation
 
-protocol ASTNodeIncompletable {
-    var isIncomplete: Bool { get }
-    var anyIncomplete: Bool { get }
-    static var incomplete: Self { get }
-}
-
-protocol ASTNode: Hashable, ASTNodeIncompletable {
+protocol ASTNode: Hashable {
     var id: UUID { get }
     var scope: ASTScope? { get set }
     func acceptVisitor<V: ASTVisitor>(_ visitor: V, _ info: V.VisitorInfo) -> V.VisitorResult
@@ -35,57 +29,6 @@ extension ASTNode {
     }
 }
 
-extension ASTNode {
-    var anyIncomplete: Bool {
-        if isIncomplete { return true }
-        return Self._containsIncomplete(in: self)
-    }
-    
-    private static func _containsIncomplete(in value: Any) -> Bool {
-        
-        if let node = value as? any ASTNode {
-            if node.isIncomplete { return true }
-        }
-        
-        let mirror = Mirror(reflecting: value)
-        
-        switch mirror.displayStyle {
-        case .optional:
-            if let child = mirror.children.first {
-                return _containsIncomplete(in: child.value)
-            }
-            return false
-            
-        case .collection, .set, .dictionary, .tuple, .struct, .class, .enum:
-            if _hasTrueIsIncompleteFlag(mirror) {
-                return true
-            }
-            
-            for child in mirror.children {
-                if _containsIncomplete(in: child.value) {
-                    return true
-                }
-            }
-            return false
-            
-        case .none:
-            return false
-            
-        default:
-            return false
-        }
-    }
-    
-    private static func _hasTrueIsIncompleteFlag(_ mirror: Mirror) -> Bool {
-        for (labelOpt, value) in mirror.children {
-            if let label = labelOpt, label == "isIncomplete", let flag = value as? Bool, flag == true {
-                return true
-            }
-        }
-        return false
-    }
-}
-
 final class TopLevel {
     var sections: [any TopLevelNode]
     
@@ -94,85 +37,43 @@ final class TopLevel {
     }
 }
 
-protocol BlockLevelNode: ASTNode {
-    
-}
-
-final class BlockLevelNodeIncomplete: BlockLevelNode {
-    var scope: ASTScope?
-    
-    let id = UUID()
-    var isIncomplete: Bool
-    
-    static var incomplete: BlockLevelNodeIncomplete {
-        BlockLevelNodeIncomplete()
-    }
-    
-    private init() {
-        self.isIncomplete = true
-    }
-    
-    func acceptVisitor<V: ASTVisitor>(_ visitor: V, _ info: V.VisitorInfo) -> V.VisitorResult {
-        fatalError("Attempted to visit incomplete block-level node")
-    }
-}
+protocol BlockLevelNode: ASTNode { }
 
 protocol TopLevelNode: BlockLevelNode { }
 
-final class TopLevelNodeIncomplete: TopLevelNode {
+protocol ExpressionNode: ASTNode { }
+
+final class DefinitionNode: BlockLevelNode {
+    let id: UUID
+    let name: String
+    let type: TypeName
+    let expression: any ExpressionNode
+    let isImmutable: Bool
     var scope: ASTScope?
-    let id = UUID()
-    static var incomplete: TopLevelNodeIncomplete {
-        TopLevelNodeIncomplete()
-    }
     
-    private init() {
-        self.isIncomplete = true
+    init(id: UUID = UUID(), name: String, type: TypeName, expression: any ExpressionNode, isImmutable: Bool) {
+        self.id = id
+        self.name = name
+        self.type = type
+        self.expression = expression
+        self.isImmutable = isImmutable
     }
-    
-    var isIncomplete: Bool
     
     func acceptVisitor<V: ASTVisitor>(_ visitor: V, _ info: V.VisitorInfo) -> V.VisitorResult {
-        fatalError("Attempted to visit incomplete top-level node")
+        visitor.visitDefinition(self, info)
     }
-}
-
-extension TopLevelNode {
-    static var incomplete: FuncDefinition {
-        FuncDefinition.incomplete
-    }
-}
-
-protocol ExpressionNode: ASTNode {
-}
-
-protocol DefinitionNode: TopLevelNode {
-    var name: String { get }
-    var type: TypeName { get }
-    var expression: any ExpressionNode { get }
 }
 
 protocol StatementNode: BlockLevelNode { }
 
-final class IdentifierExpression: ExpressionNode, TopLevelNode {
-    let id = UUID()
+final class IdentifierExpression: ExpressionNode, BlockLevelNode {
+    let id: UUID
     let name: String
     var scope: ASTScope?
     
-    let isIncomplete: Bool
-    
-    static var incomplete: IdentifierExpression {
-        return IdentifierExpression()
-    }
-    
-    private init() {
-        self.name = ""
-        self.isIncomplete = true
-    }
-    
-    init(name: String) {
+    init(id: UUID = UUID(), name: String) {
+        self.id = id
         self.name = name
-        self.isIncomplete = false
     }
     
     func acceptVisitor<V: ASTVisitor>(_ visitor: V, _ info: V.VisitorInfo) -> V.VisitorResult {
@@ -181,24 +82,13 @@ final class IdentifierExpression: ExpressionNode, TopLevelNode {
 }
 
 final class BooleanExpression: ExpressionNode {
-    let id = UUID()
+    let id: UUID
     let value: Bool
     var scope: ASTScope?
     
-    let isIncomplete: Bool
-    
-    static var incomplete: BooleanExpression {
-        return BooleanExpression()
-    }
-    
-    private init() {
-        self.value = false
-        self.isIncomplete = true
-    }
-    
-    init(value: Bool) {
+    init(id: UUID = UUID(), value: Bool) {
+        self.id = id
         self.value = value
-        self.isIncomplete = false
     }
     
     func acceptVisitor<V: ASTVisitor>(_ visitor: V, _ info: V.VisitorInfo) -> V.VisitorResult {
@@ -207,24 +97,13 @@ final class BooleanExpression: ExpressionNode {
 }
 
 final class NumberExpression: ExpressionNode {
-    let id = UUID()
+    let id: UUID
     let value: Int
     var scope: ASTScope?
     
-    let isIncomplete: Bool
-    
-    static var incomplete: NumberExpression {
-        return NumberExpression()
-    }
-    
-    private init() {
-        self.value = 0
-        self.isIncomplete = true
-    }
-    
-    init(value: Int) {
+    init(id: UUID = UUID(), value: Int) {
+        self.id = id
         self.value = value
-        self.isIncomplete = false
     }
     
     func acceptVisitor<V: ASTVisitor>(_ visitor: V, _ info: V.VisitorInfo) -> V.VisitorResult {
@@ -233,7 +112,7 @@ final class NumberExpression: ExpressionNode {
 }
 
 final class UnaryOperation: ExpressionNode {
-    let id = UUID()
+    let id: UUID
     
     let op: Operator
     enum Operator {
@@ -243,22 +122,10 @@ final class UnaryOperation: ExpressionNode {
     let expression: any ExpressionNode
     var scope: ASTScope?
     
-    let isIncomplete: Bool
-    
-    static var incomplete: UnaryOperation {
-        return UnaryOperation()
-    }
-    
-    private init() {
-        self.op = .not
-        self.expression = IdentifierExpression.incomplete
-        self.isIncomplete = true
-    }
-    
-    init(op: Operator, expression: any ExpressionNode) {
+    init(id: UUID = UUID(), op: Operator, expression: any ExpressionNode) {
+        self.id = id
         self.op = op
         self.expression = expression
-        self.isIncomplete = false
     }
     
     func acceptVisitor<V: ASTVisitor>(_ visitor: V, _ info: V.VisitorInfo) -> V.VisitorResult {
@@ -267,7 +134,7 @@ final class UnaryOperation: ExpressionNode {
 }
 
 final class BinaryOperation: ExpressionNode {
-    let id = UUID()
+    let id: UUID
     let op: Operator
     enum Operator {
         case plus
@@ -280,92 +147,15 @@ final class BinaryOperation: ExpressionNode {
     let lhs, rhs: any ExpressionNode
     var scope: ASTScope?
     
-    let isIncomplete: Bool
-    
-    static var incomplete: BinaryOperation {
-        return BinaryOperation()
-    }
-    
-    private init() {
-        self.op = .plus
-        self.lhs = IdentifierExpression.incomplete
-        self.rhs = IdentifierExpression.incomplete
-        self.isIncomplete = true
-    }
-    
-    init(op: Operator, lhs: any ExpressionNode, rhs: any ExpressionNode) {
+    init(id: UUID = UUID(), op: Operator, lhs: any ExpressionNode, rhs: any ExpressionNode) {
+        self.id = id
         self.op = op
         self.lhs = lhs
         self.rhs = rhs
-        self.isIncomplete = false
     }
     
     func acceptVisitor<V: ASTVisitor>(_ visitor: V, _ info: V.VisitorInfo) -> V.VisitorResult {
         visitor.visitBinaryOperation(self, info)
-    }
-}
-
-final class LetDefinition: DefinitionNode  {
-    let id = UUID()
-    let name: String
-    let type: TypeName
-    let expression: any ExpressionNode
-    var scope: ASTScope?
-    
-    let isIncomplete: Bool
-    
-    static var incomplete: LetDefinition {
-        return LetDefinition()
-    }
-    
-    private init() {
-        self.name = ""
-        self.type = .Int
-        self.expression = IdentifierExpression.incomplete
-        self.isIncomplete = true
-    }
-    
-    init(name: String, type: TypeName, expression: any ExpressionNode) {
-        self.name = name
-        self.type = type
-        self.expression = expression
-        self.isIncomplete = false
-    }
-    
-    func acceptVisitor<V: ASTVisitor>(_ visitor: V, _ info: V.VisitorInfo) -> V.VisitorResult {
-        visitor.visitLetDefinition(self, info)
-    }
-}
-
-final class VarDefinition: DefinitionNode {
-    let id = UUID()
-    let name: String
-    let type: TypeName
-    let expression: any ExpressionNode
-    var scope: ASTScope?
-    
-    let isIncomplete: Bool
-    
-    static var incomplete: VarDefinition {
-        return VarDefinition()
-    }
-    
-    private init() {
-        self.name = ""
-        self.type = .Int
-        self.expression = IdentifierExpression.incomplete
-        self.isIncomplete = true
-    }
-    
-    init(name: String, type: TypeName, expression: any ExpressionNode) {
-        self.name = name
-        self.type = type
-        self.expression = expression
-        self.isIncomplete = false
-    }
-    
-    func acceptVisitor<V: ASTVisitor>(_ visitor: V, _ info: V.VisitorInfo) -> V.VisitorResult {
-        visitor.visitVarDefinition(self, info)
     }
 }
 
@@ -412,55 +202,33 @@ enum TypeName: Equatable {
 final class FuncDefinition: TopLevelNode {
     
     final class Parameter {
-        let id = UUID()
+        let id: UUID
         let name: String
         let type: TypeName
-        let isIncomplete: Bool
         var scope: ASTScope?
-        static var incomplete: Parameter {
-            return Parameter()
-        }
         
-        private init() {
-            self.name = ""
-            self.type = .Int
-            self.isIncomplete = true
-        }
-        
-        init(name: String, type: TypeName) {
+        init(id: UUID = UUID(), name: String, type: TypeName) {
+            self.id = id
             self.name = name
             self.type = type
-            self.isIncomplete = false
         }
     }
     
-    let id = UUID()
+    let id: UUID
     let name: String
     let type: TypeName
     let parameters: [Parameter]
     let body: [any BlockLevelNode]
     var scope: ASTScope?
+    let isEntry: Bool
     
-    let isIncomplete: Bool
-    
-    static var incomplete: FuncDefinition {
-        return FuncDefinition()
-    }
-    
-    private init() {
-        self.name = ""
-        self.type = .Int
-        self.parameters = []
-        self.body = []
-        self.isIncomplete = true
-    }
-    
-    init(name: String, type: TypeName, parameters: [Parameter], body: [any BlockLevelNode]) {
+    init(id: UUID = UUID(), name: String, type: TypeName, parameters: [Parameter], body: [any BlockLevelNode], isEntry: Bool) {
+        self.id = id
         self.name = name
         self.type = type
         self.parameters = parameters
         self.body = body
-        self.isIncomplete = false
+        self.isEntry = isEntry
     }
     
     func acceptVisitor<V: ASTVisitor>(_ visitor: V, _ info: V.VisitorInfo) -> V.VisitorResult {
@@ -468,28 +236,16 @@ final class FuncDefinition: TopLevelNode {
     }
 }
 
-final class FuncApplication: ExpressionNode, TopLevelNode {
-    let id = UUID()
+final class FuncApplication: ExpressionNode, BlockLevelNode {
+    let id: UUID
     let name: String
     let arguments: [any ExpressionNode]
     var scope: ASTScope?
     
-    let isIncomplete: Bool
-    
-    static var incomplete: FuncApplication {
-        return FuncApplication()
-    }
-    
-    private init() {
-        self.name = ""
-        self.arguments = []
-        self.isIncomplete = true
-    }
-    
-    init(name: String, arguments: [any ExpressionNode]) {
+    init(id: UUID = UUID(), name: String, arguments: [any ExpressionNode]) {
+        self.id = id
         self.name = name
         self.arguments = arguments
-        self.isIncomplete = false
     }
     
     func acceptVisitor<V: ASTVisitor>(_ visitor: V, _ info: V.VisitorInfo) -> V.VisitorResult {
@@ -498,30 +254,17 @@ final class FuncApplication: ExpressionNode, TopLevelNode {
 }
 
 final class IfStatement: StatementNode, BlockLevelNode {
-    let id = UUID()
+    let id: UUID
     let condition: any ExpressionNode
     let thenBranch: [any BlockLevelNode]
     let elseBranch: [any BlockLevelNode]?
     var scope: ASTScope?
     
-    let isIncomplete: Bool
-    
-    static var incomplete: IfStatement {
-        return IfStatement()
-    }
-    
-    private init() {
-        self.condition = IdentifierExpression.incomplete
-        self.thenBranch = []
-        self.elseBranch = nil
-        self.isIncomplete = true
-    }
-    
-    init(condition: any ExpressionNode, thenBranch: [any BlockLevelNode], elseBranch: [any BlockLevelNode]?) {
+    init(id: UUID = UUID(), condition: any ExpressionNode, thenBranch: [any BlockLevelNode], elseBranch: [any BlockLevelNode]?) {
+        self.id = id
         self.condition = condition
         self.thenBranch = thenBranch
         self.elseBranch = elseBranch
-        self.isIncomplete = false
     }
     
     func acceptVisitor<V: ASTVisitor>(_ visitor: V, _ info: V.VisitorInfo) -> V.VisitorResult {
@@ -530,23 +273,13 @@ final class IfStatement: StatementNode, BlockLevelNode {
 }
 
 final class ReturnStatement: StatementNode, BlockLevelNode {
-    let id = UUID()
+    let id: UUID
     let expression: any ExpressionNode
     var scope: ASTScope?
     
-    let isIncomplete: Bool
-    static var incomplete: ReturnStatement {
-        return ReturnStatement()
-    }
-    
-    private init() {
-        self.expression = IdentifierExpression.incomplete
-        self.isIncomplete = true
-    }
-    
-    init(expression: any ExpressionNode) {
+    init(id: UUID = UUID(), expression: any ExpressionNode) {
+        self.id = id
         self.expression = expression
-        self.isIncomplete = false
     }
     
     func acceptVisitor<V: ASTVisitor>(_ visitor: V, _ info: V.VisitorInfo) -> V.VisitorResult {
@@ -554,27 +287,16 @@ final class ReturnStatement: StatementNode, BlockLevelNode {
     }
 }
 
-final class AssignmentStatement: StatementNode, TopLevelNode {
-    let id = UUID()
+final class AssignmentStatement: StatementNode, BlockLevelNode {
+    let id: UUID
     let name: String
     let expression: any ExpressionNode
     var scope: ASTScope?
     
-    var isIncomplete: Bool
-    static var incomplete: AssignmentStatement {
-        return AssignmentStatement()
-    }
-    
-    init(name: String, expression: any ExpressionNode) {
+    init(id: UUID = UUID(), name: String, expression: any ExpressionNode) {
+        self.id = id
         self.name = name
         self.expression = expression
-        self.isIncomplete = false
-    }
-    
-    private init() {
-        self.name = ""
-        self.expression = IdentifierExpression.incomplete
-        self.isIncomplete = true
     }
     
     func acceptVisitor<V: ASTVisitor>(_ visitor: V, _ info: V.VisitorInfo) -> V.VisitorResult {

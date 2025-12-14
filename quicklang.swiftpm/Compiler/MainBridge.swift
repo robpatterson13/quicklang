@@ -31,7 +31,7 @@ class MainBridge {
     }
     
     func sendDisplayNodes(from tree: ASTContext) {
-        let display = ConvertToDisplayableNode.shared.begin(tree.tree)
+        let display = ConvertToDisplayableNode.shared.begin(tree.rawTree)
         viewModel.receiveDisplayTree(display)
     }
     

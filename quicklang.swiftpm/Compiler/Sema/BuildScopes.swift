@@ -34,7 +34,7 @@ class BuildScopes: SemaPass {
     }
     
     enum WillIntroduceNewDecl {
-        case yes(any DefinitionNode)
+        case yes(DefinitionNode)
         case no
     }
     
@@ -83,18 +83,8 @@ class BuildScopes: SemaPass {
         return .no
     }
     
-    func visitLetDefinition(
-        _ definition: LetDefinition,
-        _ info: ASTScope
-    ) -> WillIntroduceNewDecl {
-        definition.scope = info
-        
-        _ = definition.expression.acceptVisitor(self, info)
-        return .yes(definition)
-    }
-    
-    func visitVarDefinition(
-        _ definition: VarDefinition,
+    func visitDefinition(
+        _ definition: DefinitionNode,
         _ info: ASTScope)
     -> WillIntroduceNewDecl {
         definition.scope = info

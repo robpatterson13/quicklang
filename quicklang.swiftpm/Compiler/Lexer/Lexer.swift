@@ -248,7 +248,7 @@ final class Lexer: CompilerPhase {
             if self.peekNextCharacter() == ">" {
                 lexeme += String(self.consumeCharacter())
             }
-            fallthrough
+            break
         case "+", "=", "<", ">":
             guard let nextChar = self.peekNextCharacter(),
                     nextChar == "=" else {
@@ -256,8 +256,18 @@ final class Lexer: CompilerPhase {
             }
             
             lexeme += String(self.consumeCharacter())
+        case "&":
+            if self.peekNextCharacter() == "&" {
+                lexeme += String(self.consumeCharacter())
+            }
+            break
+        case "|":
+            if self.peekNextCharacter() == "|" {
+                lexeme += String(self.consumeCharacter())
+            }
+            break
         default:
-            guard ["*", "(", ")", ":", "{", "}", "!", ",", ";"].contains(lexeme) else {
+            guard ["*", "(", ")", ":", "{", "}", "!", ",", ";", "@", "&", "|"].contains(lexeme) else {
                 try throwError(.unknownCharacter(char: lexeme), locationBuilder: locationBuilder)
             }
         }

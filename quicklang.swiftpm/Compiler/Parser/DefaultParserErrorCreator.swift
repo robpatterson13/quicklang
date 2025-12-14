@@ -1,5 +1,5 @@
 //
-//  DefaultParserErrorMessageManager.swift
+//  DefaultParserErrorCreator.swift
 //  quicklang
 //
 //  Created by Rob Patterson on 9/14/25.
@@ -46,9 +46,22 @@ class DefaultParserErrorCreator: ParserErrorCreator {
             specific = "function application"
         case .assignmentStatement:
             specific = "assignment statement"
+        case .attribute:
+            specific = "attribute"
         }
         
         let message = "Expected an identifier in \(specific)"
+        return ParserError(location: info.sourceLocation, message: message)
+    }
+    
+    func expectedValidAttribute(info: ExpectedValidAttributeErrorInfo) -> ParserError {
+        let specific: String
+        switch info.type {
+        case .notAnAttribute(let string):
+            specific = "got `\(string)`"
+        }
+        
+        let message = "Expected a valid attribute, got \(specific)"
         return ParserError(location: info.sourceLocation, message: message)
     }
     

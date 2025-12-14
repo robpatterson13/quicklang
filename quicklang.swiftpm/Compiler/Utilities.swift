@@ -78,7 +78,7 @@ extension Array {
     }
 }
 
-extension Array where Element == any BlockLevelNode {
+extension Array where Element == any RawBlockLevelNode {
     
     var anyIncomplete: Bool {
         for node in self {
@@ -91,24 +91,11 @@ extension Array where Element == any BlockLevelNode {
     }
 }
 
-extension Array where Element == FuncDefinition.Parameter {
+extension Array where Element == RawFuncDefinition.Parameter {
     
     var anyIncomplete: Bool {
         for parameter in self {
             if parameter.isIncomplete {
-                return true
-            }
-        }
-        
-        return false
-    }
-}
-
-extension Array where Element == any ExpressionNode {
-    
-    var anyIncomplete: Bool {
-        for expression in self {
-            if expression.isIncomplete {
                 return true
             }
         }
