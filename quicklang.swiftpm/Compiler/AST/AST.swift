@@ -114,15 +114,11 @@ final class NumberExpression: ExpressionNode {
 final class UnaryOperation: ExpressionNode {
     let id: UUID
     
-    let op: Operator
-    enum Operator {
-        case not
-        case neg
-    }
+    let op: UnaryOperator
     let expression: any ExpressionNode
     var scope: ASTScope?
     
-    init(id: UUID = UUID(), op: Operator, expression: any ExpressionNode) {
+    init(id: UUID = UUID(), op: UnaryOperator, expression: any ExpressionNode) {
         self.id = id
         self.op = op
         self.expression = expression
@@ -135,19 +131,11 @@ final class UnaryOperation: ExpressionNode {
 
 final class BinaryOperation: ExpressionNode {
     let id: UUID
-    let op: Operator
-    enum Operator {
-        case plus
-        case minus
-        case times
-        
-        case and
-        case or
-    }
+    let op: BinaryOperator
     let lhs, rhs: any ExpressionNode
     var scope: ASTScope?
     
-    init(id: UUID = UUID(), op: Operator, lhs: any ExpressionNode, rhs: any ExpressionNode) {
+    init(id: UUID = UUID(), op: BinaryOperator, lhs: any ExpressionNode, rhs: any ExpressionNode) {
         self.id = id
         self.op = op
         self.lhs = lhs
@@ -156,46 +144,6 @@ final class BinaryOperation: ExpressionNode {
     
     func acceptVisitor<V: ASTVisitor>(_ visitor: V, _ info: V.VisitorInfo) -> V.VisitorResult {
         visitor.visitBinaryOperation(self, info)
-    }
-}
-
-enum TypeName: Equatable {
-    case Bool
-    case Int
-    case String
-    case Void
-    indirect case Arrow(from: [TypeName], to: TypeName)
-    
-    static func == (lhs: TypeName, rhs: TypeName) -> Bool {
-        switch (lhs, rhs) {
-        case (.Bool, .Bool),
-            (.Int, .Int),
-            (.String, .String),
-            (.Void, .Void):
-            return true
-        case (.Arrow(let lhsFrom, let lhsTo), .Arrow(let rhsFrom, let rhsTo)):
-            return (lhsFrom == rhsFrom) && (lhsTo == rhsTo)
-        default:
-            return false
-        }
-    }
-    
-    var returnType: TypeName? {
-        switch self {
-        case .Arrow(from: _, to: let to):
-            return to
-        default:
-            return nil
-        }
-    }
-    
-    var paramTypes: [TypeName]? {
-        switch self {
-        case .Arrow(from: let from, to: _):
-            return from
-        default:
-            return nil
-        }
     }
 }
 

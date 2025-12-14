@@ -343,7 +343,7 @@ protocol RawExpressionNode: RawASTNode { }
 
 protocol RawDefinitionNode: RawBlockLevelNode {
     var name: String { get }
-    var type: RawTypeName { get }
+    var type: TypeName { get }
     var expression: any RawExpressionNode { get }
 }
 
@@ -430,11 +430,7 @@ final class RawNumberExpression: RawExpressionNode {
 final class RawUnaryOperation: RawExpressionNode {
     let id = UUID()
     
-    let op: Operator
-    enum Operator {
-        case not
-        case neg
-    }
+    let op: UnaryOperator
     let expression: any RawExpressionNode
     var scope: RawASTScope?
     
@@ -450,7 +446,7 @@ final class RawUnaryOperation: RawExpressionNode {
         self.isIncomplete = true
     }
     
-    init(op: Operator, expression: any RawExpressionNode) {
+    init(op: UnaryOperator, expression: any RawExpressionNode) {
         self.op = op
         self.expression = expression
         self.isIncomplete = false
@@ -463,15 +459,7 @@ final class RawUnaryOperation: RawExpressionNode {
 
 final class RawBinaryOperation: RawExpressionNode {
     let id = UUID()
-    let op: Operator
-    enum Operator {
-        case plus
-        case minus
-        case times
-        
-        case and
-        case or
-    }
+    let op: BinaryOperator
     let lhs, rhs: any RawExpressionNode
     var scope: RawASTScope?
     
@@ -488,7 +476,7 @@ final class RawBinaryOperation: RawExpressionNode {
         self.isIncomplete = true
     }
     
-    init(op: Operator, lhs: any RawExpressionNode, rhs: any RawExpressionNode) {
+    init(op: BinaryOperator, lhs: any RawExpressionNode, rhs: any RawExpressionNode) {
         self.op = op
         self.lhs = lhs
         self.rhs = rhs
@@ -500,50 +488,10 @@ final class RawBinaryOperation: RawExpressionNode {
     }
 }
 
-enum RawTypeName: Equatable {
-    case Bool
-    case Int
-    case String
-    case Void
-    indirect case Arrow(from: [RawTypeName], to: RawTypeName)
-    
-    static func == (lhs: RawTypeName, rhs: RawTypeName) -> Bool {
-        switch (lhs, rhs) {
-        case (.Bool, .Bool),
-            (.Int, .Int),
-            (.String, .String),
-            (.Void, .Void):
-            return true
-        case (.Arrow(let lhsFrom, let lhsTo), .Arrow(let rhsFrom, let rhsTo)):
-            return (lhsFrom == rhsFrom) && (lhsTo == rhsTo)
-        default:
-            return false
-        }
-    }
-    
-    var returnType: RawTypeName? {
-        switch self {
-        case .Arrow(from: _, to: let to):
-            return to
-        default:
-            return nil
-        }
-    }
-    
-    var paramTypes: [RawTypeName]? {
-        switch self {
-        case .Arrow(from: let from, to: _):
-            return from
-        default:
-            return nil
-        }
-    }
-}
-
 final class RawLetDefinition: RawDefinitionNode  {
     let id = UUID()
     let name: String
-    let type: RawTypeName
+    let type: TypeName
     let expression: any RawExpressionNode
     var scope: RawASTScope?
     
@@ -560,7 +508,7 @@ final class RawLetDefinition: RawDefinitionNode  {
         self.isIncomplete = true
     }
     
-    init(name: String, type: RawTypeName, expression: any RawExpressionNode) {
+    init(name: String, type: TypeName, expression: any RawExpressionNode) {
         self.name = name
         self.type = type
         self.expression = expression
@@ -575,7 +523,7 @@ final class RawLetDefinition: RawDefinitionNode  {
 final class RawVarDefinition: RawDefinitionNode {
     let id = UUID()
     let name: String
-    let type: RawTypeName
+    let type: TypeName
     let expression: any RawExpressionNode
     var scope: RawASTScope?
     
@@ -592,7 +540,7 @@ final class RawVarDefinition: RawDefinitionNode {
         self.isIncomplete = true
     }
     
-    init(name: String, type: RawTypeName, expression: any RawExpressionNode) {
+    init(name: String, type: TypeName, expression: any RawExpressionNode) {
         self.name = name
         self.type = type
         self.expression = expression
@@ -609,7 +557,7 @@ final class RawFuncDefinition: RawTopLevelNode {
     final class Parameter {
         let id = UUID()
         let name: String
-        let type: RawTypeName
+        let type: TypeName
         let isIncomplete: Bool
         var scope: RawASTScope?
         static var incomplete: Parameter {
@@ -622,7 +570,7 @@ final class RawFuncDefinition: RawTopLevelNode {
             self.isIncomplete = true
         }
         
-        init(name: String, type: RawTypeName) {
+        init(name: String, type: TypeName) {
             self.name = name
             self.type = type
             self.isIncomplete = false
@@ -631,7 +579,7 @@ final class RawFuncDefinition: RawTopLevelNode {
     
     let id = UUID()
     let name: String
-    let type: RawTypeName
+    let type: TypeName
     let parameters: [Parameter]
     let body: [any RawBlockLevelNode]
     var scope: RawASTScope?
@@ -650,7 +598,7 @@ final class RawFuncDefinition: RawTopLevelNode {
         self.isIncomplete = true
     }
     
-    init(name: String, type: RawTypeName, parameters: [Parameter], body: [any RawBlockLevelNode]) {
+    init(name: String, type: TypeName, parameters: [Parameter], body: [any RawBlockLevelNode]) {
         self.name = name
         self.type = type
         self.parameters = parameters

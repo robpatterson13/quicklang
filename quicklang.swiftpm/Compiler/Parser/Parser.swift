@@ -91,6 +91,16 @@ final class Parser: CompilerPhase {
         tokens.moveToEnd()
     }
     
+    private func peek(comparing: Token, burn: Bool = false) -> Bool {
+        guard let next = tokens.peekNext() else { return false }
+        if next == comparing {
+            tokens.burn()
+            return true
+        }
+        
+        return false
+    }
+    
     private func recover(using strategy: RecoveryStrategy) {
         
         func dropUntil(_ set: RecoveryStrategy.RecoverySet) {
@@ -189,6 +199,15 @@ final class Parser: CompilerPhase {
         default:
             let recoverFromNonexistantAttribute = self.error(.expectedValidAttribute(in: .notAnAttribute(identifier)))
             recover(using: recoverFromNonexistantAttribute)
+            return .incomplete
+        }
+        
+        let result = expect(.FUNC, else: .expectedTopLevelStatement(got: .eof))
+        switch result {
+        case .success:
+            break
+        case .failure(let strategy):
+            recover(using: strategy)
             return .incomplete
         }
         
@@ -366,18 +385,17 @@ final class Parser: CompilerPhase {
             return .incomplete
         }
         
-        let recoverFromArrowMissing = consume(.ARROW, else: .expectedArrowInFunctionDefinition)
-        if let recoverFromArrowMissing {
-            recover(using: recoverFromArrowMissing)
-            return .incomplete
-        }
-        
-        guard let typeName = parseType(at: .functionType) else {
-            return .incomplete
+        var typeName: TypeName = .Void
+        if peek(comparing: .ARROW, burn: true) {
+            guard let foundTypeName = parseType(at: .functionType) else {
+                return .incomplete
+            }
+            
+            typeName = foundTypeName
         }
         
         let parameterTypes = parameters.map { $0.type }
-        let funcType: RawTypeName = .Arrow(from: parameterTypes, to: typeName)
+        let funcType: TypeName = .Arrow(from: parameterTypes, to: typeName)
         
         let body = parseBlock(in: .functionBody)
         if body.anyIncomplete {
@@ -444,12 +462,6 @@ final class Parser: CompilerPhase {
         )
         if let recoverFromIfKeywordMissing {
             recover(using: recoverFromIfKeywordMissing)
-            return .incomplete
-        }
-        
-        let recoverFromLParenMissing = consume(.LPAREN, else: .expectedLeftParen(where: .ifStatement))
-        if let recoverFromLParenMissing {
-            recover(using: recoverFromLParenMissing)
             return .incomplete
         }
         
@@ -684,18 +696,18 @@ final class Parser: CompilerPhase {
                 return rhsNode
             }
             
-            var opVal: RawBinaryOperation.Operator
+            var opVal: BinaryOperator
             switch op.value {
             case "+":
-                opVal = RawBinaryOperation.Operator.plus
+                opVal = BinaryOperator.plus
             case "-":
-                opVal = RawBinaryOperation.Operator.minus
+                opVal = BinaryOperator.minus
             case "*":
-                opVal = RawBinaryOperation.Operator.times
+                opVal = BinaryOperator.times
             case "&&":
-                opVal = RawBinaryOperation.Operator.and
+                opVal = BinaryOperator.and
             case "||":
-                opVal = RawBinaryOperation.Operator.or
+                opVal = BinaryOperator.or
             default:
                 fatalError() // TODO: unreachable with current grammar
             }
@@ -853,7 +865,7 @@ final class Parser: CompilerPhase {
     
     typealias TypeLocation = ExpectedTypeIdentifierErrorInfo.ErrorType
     
-    private func parseType(at location: TypeLocation) -> RawTypeName? {
+    private func parseType(at location: TypeLocation) -> TypeName? {
         
         let nextToken: Token
         let result = expect(else: .expectedTypeIdentifier(where: location), burnToken: true)

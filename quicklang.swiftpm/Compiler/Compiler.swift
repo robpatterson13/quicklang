@@ -29,6 +29,7 @@ class Compiler {
     
     private var lexer: Lexer?
     private var parser: Parser?
+    private var desugarer: Desugar?
     private var sema: Sema?
     private var lowerToFIR: ConvertToRawFIR?
     
@@ -70,7 +71,19 @@ class Compiler {
         
         bridge?.sendDisplayNodes(from: parseResult)
         
-        switch startSema(passes: Sema.defaultPasses, parseResult, settings: settings) {
+        let desugaredResult: Desugar.SuccessfulResult
+        switch startDesugaring(parseResult, settings: settings) {
+        case .success(result: let result):
+            desugaredResult = result
+            print("DESUGARED")
+            dump(result.tree)
+            print("END DESUGARED")
+        case .failure:
+            onFailure()
+            return
+        }
+        
+        switch startSema(passes: Sema.defaultPasses, desugaredResult, settings: settings) {
         case .success(result: let result):
             if let result {
                 dump(result.tree)
@@ -109,6 +122,15 @@ class Compiler {
         }
         
         return parser!.begin(tokens)
+    }
+    
+    private func startDesugaring(_ tree: Parser.SuccessfulResult, settings: DriverSettings) -> PhaseResult<Desugar> {
+        if desugarer == nil {
+            desugarer = Desugar(errorManager: errorManager, settings: settings)
+        }
+        
+        let input: Desugar.InputType = tree
+        return desugarer!.begin(input)
     }
     
     private func startSema(passes: [Sema.PassType], _ tree: Parser.SuccessfulResult, settings: DriverSettings) -> PhaseResult<Sema> {

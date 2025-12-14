@@ -149,7 +149,7 @@ enum FIROperation {
     case minus
     case times
     
-    static func convert(from op: UnaryOperation.Operator) -> FIROperation {
+    static func convert(from op: UnaryOperator) -> FIROperation {
         switch op {
         case .not:
             return .not
@@ -158,7 +158,7 @@ enum FIROperation {
         }
     }
     
-    static func convert(from op: BinaryOperation.Operator) -> FIROperation {
+    static func convert(from op: BinaryOperator) -> FIROperation {
         switch op {
         case .plus:
             return .plus
