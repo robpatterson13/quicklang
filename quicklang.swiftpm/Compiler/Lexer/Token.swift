@@ -46,10 +46,12 @@ enum Token {
         }
         
         switch op {
-        case "+", "-":
+        case "&&", "||":
             return (1, 2)
-        case "*", "/":
+        case "+", "-":
             return (3, 4)
+        case "*", "/":
+            return (5, 6)
         default:
             fatalError("Binding power of \(op) not yet implemented")
         }
@@ -103,6 +105,8 @@ extension Token {
     static let COMMA: Token = .buildSymbol(",")
     static let EQUAL: Token = .buildSymbol("=")
     
+    static let NEWLINE: Token = .buildSymbol("\n")
+    
     private static func buildSymbol(_ symbol: String) -> Token {
         return .Symbol(symbol, location: .dummySourceCodeLocation)
     }
@@ -118,7 +122,7 @@ extension Token {
     
     static let FUNC: Token = .buildKeyword("func")
     
-    static let LET: Token = .buildKeyword("func")
+    static let LET: Token = .buildKeyword("let")
     static let VAR: Token = .buildKeyword("var")
     
     private static func buildKeyword(_ keyword: String) -> Token {

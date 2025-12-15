@@ -285,12 +285,18 @@ class BindingCheck: SemaPass, ASTVisitor {
             return
         }
         
-        let paramNames = params.map { $0.name }
-        let paramSet = Set(arrayLiteral: paramNames)
-        
-        guard paramSet.count == paramNames.count else {
-            addError(.parameterNamesNotUnique(repeated: "you gotta do this one"), at: .beginningOfFile)
-            return
+        for (idx, param) in params.enumerated() {
+            let newArray = params.enumerated().filter { index, _ in
+                return index != idx
+            }.map { _, param in
+                param
+            }
+            
+            let set = Set(newArray)
+            if set.contains(param) {
+                addError(.parameterNamesNotUnique(repeated: param.name), at: .beginningOfFile)
+                return
+            }
         }
     }
     

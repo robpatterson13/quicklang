@@ -248,7 +248,7 @@ final class Lexer: CompilerPhase {
             if self.peekNextCharacter() == ">" {
                 lexeme += String(self.consumeCharacter())
             }
-            break
+            fallthrough
         case "+", "=", "<", ">":
             guard let nextChar = self.peekNextCharacter(),
                     nextChar == "=" else {
@@ -260,7 +260,7 @@ final class Lexer: CompilerPhase {
             if self.peekNextCharacter() == "&" {
                 lexeme += String(self.consumeCharacter())
             }
-            break
+            fallthrough
         case "|":
             if self.peekNextCharacter() == "|" {
                 lexeme += String(self.consumeCharacter())

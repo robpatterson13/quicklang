@@ -149,7 +149,7 @@ final class BinaryOperation: ExpressionNode {
 
 final class FuncDefinition: TopLevelNode {
     
-    final class Parameter {
+    final class Parameter: Hashable {
         let id: UUID
         let name: String
         let type: TypeName
@@ -159,6 +159,14 @@ final class FuncDefinition: TopLevelNode {
             self.id = id
             self.name = name
             self.type = type
+        }
+        
+        static func == (lhs: FuncDefinition.Parameter, rhs: FuncDefinition.Parameter) -> Bool {
+            return lhs.name == rhs.name
+        }
+        
+        func hash(into hasher: inout Hasher) {
+            hasher.combine(name)
         }
     }
     
@@ -252,4 +260,3 @@ final class AssignmentStatement: StatementNode, BlockLevelNode {
     }
     
 }
-

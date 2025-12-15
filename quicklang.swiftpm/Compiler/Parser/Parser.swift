@@ -428,14 +428,14 @@ final class Parser: CompilerPhase {
         }
     }
     
-    private func parseBlock(in usage: BlockContext) -> [any RawBlockLevelNode] {
+    private func parseBlock(in usage: BlockContext) -> RawBlockStatement {
         
         var bodyParts: [any RawBlockLevelNode] = []
         
         let recoverFromLBraceMissing = consume(.LBRACE, else: .expectedLeftBrace(where: usage.errorTypeForLeft))
         if let recoverFromLBraceMissing {
             recover(using: recoverFromLBraceMissing)
-            return [RawFuncApplication.incomplete]
+            return .incomplete
         }
         
         while let nextToken = tokens.peekNext(), nextToken != .RBRACE {
@@ -451,7 +451,22 @@ final class Parser: CompilerPhase {
             bodyParts.append(RawFuncApplication.incomplete)
         }
         
-        return bodyParts
+        let block = RawBlockStatement(statements: bodyParts)
+        return block
+    }
+    
+    private func parseConditionalBlock() -> RawConditionalBlock {
+        let condition = parseExpression(until: "{", min: 0)
+        guard !condition.isIncomplete else {
+            return .incomplete
+        }
+        
+        let block = parseBlock(in: .ifStatement)
+        guard !block.anyIncomplete else {
+            return .incomplete
+        }
+        
+        return RawConditionalBlock(condition: condition, body: block)
     }
     
     private func parseIfStatement() -> RawIfStatement {
@@ -465,28 +480,39 @@ final class Parser: CompilerPhase {
             return .incomplete
         }
         
-        let condition = parseExpression(until: "{", min: 0)
-        guard !condition.isIncomplete else {
+        let firstBlock = parseConditionalBlock()
+        guard !firstBlock.isIncomplete else {
             return .incomplete
         }
         
-        let thnBlock = parseBlock(in: .ifStatement)
-        guard !thnBlock.anyIncomplete else {
-            return .incomplete
+        var blocks = [firstBlock]
+        while true {
+            guard let token = tokens.peekNext(), token == .ELSE else {
+                return RawIfStatement(conditionalBlocks: blocks)
+            }
+            
+            tokens.burn()
+            
+            guard let token = tokens.peekNext(), token == .IF else {
+                let elsBlock = parseBlock(in: .ifStatement)
+                guard !elsBlock.anyIncomplete else {
+                    return .incomplete
+                }
+                
+                return RawIfStatement(conditionalBlocks: blocks, elseBranch: elsBlock)
+            }
+            
+            tokens.burn()
+            
+            let newBlock = parseConditionalBlock()
+            guard !newBlock.anyIncomplete else {
+                return .incomplete
+            }
+            
+            blocks.append(newBlock)
         }
         
-        guard let token = tokens.peekNext(), token == .ELSE else {
-            return RawIfStatement(condition: condition, thenBranch: thnBlock, elseBranch: nil)
-        }
-        
-        tokens.burn() // else
-        
-        let elsBlock = parseBlock(in: .ifStatement)
-        guard !elsBlock.anyIncomplete else {
-            return .incomplete
-        }
-        
-        return RawIfStatement(condition: condition, thenBranch: thnBlock, elseBranch: elsBlock)
+        return RawIfStatement(conditionalBlocks: blocks)
     }
     
     private func parseReturnStatement() -> RawReturnStatement {

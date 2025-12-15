@@ -15,6 +15,7 @@ struct DisplayableNode: Identifiable {
 }
 
 class ConvertToDisplayableNode: RawASTVisitor {
+    
     typealias VisitorResult = DisplayableNode
     typealias VisitorInfo = Void
     
@@ -101,16 +102,36 @@ class ConvertToDisplayableNode: RawASTVisitor {
         return DisplayableNode(id: definition.id, name: "Var Definition", description: definition.name, children: [displayExpr])
     }
     
+    func visitRawConditionalBlock(
+        _ block: RawConditionalBlock,
+        _ info: Void
+    ) -> DisplayableNode {
+        let condition = block.condition.acceptVisitor(self)
+        let conditionView = DisplayableNode(id: block.id, name: "Condition", description: "", children: [condition])
+        
+        let body = block.body.acceptVisitor(self)
+        
+        return DisplayableNode(id: block.id, name: "Body", description: "", children: [conditionView, body])
+    }
+    
+    func visitRawBlockStatement(
+        _ block: RawBlockStatement,
+        _ info: Void
+    ) -> DisplayableNode {
+        let statements = block.statements.map { node in
+            node.acceptVisitor(self)
+        }
+        
+        return DisplayableNode(id: block.id, name: "Block Statement", description: "", children: statements)
+    }
+    
     func visitRawFuncDefinition(
         _ definition: RawFuncDefinition,
         _ info: Void
     ) -> DisplayableNode {
-        var displayExpr: [DisplayableNode] = []
-        definition.body.forEach { node in
-            displayExpr.append(node.acceptVisitor(self))
-        }
+        let body = definition.body.acceptVisitor(self)
         
-        return DisplayableNode(id: definition.id, name: "Func Definition", description: definition.name, children: displayExpr)
+        return DisplayableNode(id: definition.id, name: "Func Definition", description: definition.name, children: [body])
     }
     
     func visitRawFuncApplication(
@@ -129,18 +150,13 @@ class ConvertToDisplayableNode: RawASTVisitor {
         _ statement: RawIfStatement,
         _ info: Void
     ) -> DisplayableNode {
-        var displayExpr: [DisplayableNode] = []
-        // include condition as first child for clarity
-        let conditionDisplay = statement.condition.acceptVisitor(self)
-        displayExpr.append(conditionDisplay)
-        statement.thenBranch.forEach { node in
-            displayExpr.append(node.acceptVisitor(self))
-        }
-        statement.elseBranch?.forEach { node in
-            displayExpr.append(node.acceptVisitor(self))
+        var conditionalBlocks: [DisplayableNode] = statement.conditionalBlocks.map { $0.acceptVisitor(self) }
+        if let elseBranch = statement.elseBranch {
+            let displayElse = elseBranch.acceptVisitor(self)
+            conditionalBlocks.append(displayElse)
         }
         
-        return DisplayableNode(id: statement.id, name: "If Statement", description: "if", children: displayExpr)
+        return DisplayableNode(id: statement.id, name: "If Statement", description: "", children: conditionalBlocks)
     }
     
     func visitRawReturnStatement(

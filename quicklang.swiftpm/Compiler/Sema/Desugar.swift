@@ -31,6 +31,8 @@ final class Desugar: CompilerPhase, RawASTVisitor {
         case expression(any ExpressionNode)
         case blockLevel(any BlockLevelNode)
         case topLevel(any TopLevelNode)
+        case block([any BlockLevelNode])
+        case conditionalBlock(any ExpressionNode, [any BlockLevelNode])
         
         func unwrapExpression() -> any ExpressionNode {
             guard case .expression(let node) = self else {
@@ -54,6 +56,22 @@ final class Desugar: CompilerPhase, RawASTVisitor {
             }
             
             return node
+        }
+        
+        func unwrapBlock() -> [any BlockLevelNode] {
+            guard case .block(let array) = self else {
+                fatalError("Cannot uwnrap non-block as block")
+            }
+            
+            return array
+        }
+        
+        func unwrapConditionalBlock() -> (any ExpressionNode, [any BlockLevelNode]) {
+            guard case .conditionalBlock(let expr, let block) = self else {
+                fatalError("Cannot unwrap non-block as block")
+            }
+            
+            return (expr, block)
         }
     }
     
@@ -139,12 +157,15 @@ final class Desugar: CompilerPhase, RawASTVisitor {
         visitRawDefinition(definition, false)
     }
     
-    func processBlock(
-        _ block: [any RawBlockLevelNode]
-    ) -> [any BlockLevelNode] {
-        block.map { node in
+    func visitRawBlockStatement(
+        _ block: RawBlockStatement,
+        _ info: DesugaringContext
+    ) -> DesugaringBridgeToAST {
+        let statements = block.statements.map { node in
             node.acceptVisitor(self, .nothing).unwrapBlockLevel()
         }
+        
+        return .block(statements)
     }
     
     func visitRawFuncDefinition(
@@ -154,7 +175,7 @@ final class Desugar: CompilerPhase, RawASTVisitor {
         let parameters = definition.parameters.map { param in
             FuncDefinition.Parameter(name: param.name, type: param.type)
         }
-        let body = processBlock(definition.body)
+        let body = definition.body.acceptVisitor(self, .nothing).unwrapBlock()
         let function = FuncDefinition(
             name: definition.name,
             type: definition.type,
@@ -181,24 +202,51 @@ final class Desugar: CompilerPhase, RawASTVisitor {
         return .expression(application)
     }
     
+    func visitRawConditionalBlock(
+        _ block: RawConditionalBlock,
+        _ info: DesugaringContext
+    ) -> DesugaringBridgeToAST {
+        let condition = block.condition.acceptVisitor(self, .nothing).unwrapExpression()
+        let branch = block.body.acceptVisitor(self, .nothing).unwrapBlock()
+        
+        return .conditionalBlock(condition, branch)
+    }
+    
     func visitRawIfStatement(
         _ statement: RawIfStatement,
         _ info: DesugaringContext
     ) -> DesugaringBridgeToAST {
-        let condition = statement.condition.acceptVisitor(self, .nothing)
-        let thenBranch = processBlock(statement.thenBranch)
-        var elseBranch: [any BlockLevelNode]? = nil
-        if let elseBlock = statement.elseBranch {
-            elseBranch = processBlock(elseBlock)
+        let blocks = statement.conditionalBlocks.map { block in
+            block.acceptVisitor(self, .nothing).unwrapConditionalBlock()
         }
-        let ifStatment = IfStatement(
-            condition: condition.unwrapExpression(),
-            thenBranch: thenBranch,
+        
+        guard let (lastCond, lastBlock) = blocks.last else {
+            fatalError("Empty if statement is not possible")
+        }
+        
+        let elseBranch = statement.elseBranch?.acceptVisitor(self, .nothing).unwrapBlock() ?? nil
+        let innermostIfElseStatement = IfStatement(
+            condition: lastCond,
+            thenBranch: lastBlock,
             elseBranch: elseBranch
         )
         
-        return .blockLevel(ifStatment)
-
+        guard blocks.count > 1 else {
+            return .blockLevel(innermostIfElseStatement)
+        }
+        
+        var lastIfStatement = innermostIfElseStatement
+        for (cond, block) in blocks.reversed()[1...] {
+            let newElse = [lastIfStatement]
+            
+            lastIfStatement = IfStatement(
+                condition: cond,
+                thenBranch: block,
+                elseBranch: newElse
+            )
+        }
+        
+        return .blockLevel(lastIfStatement)
     }
     
     func visitRawReturnStatement(
@@ -223,7 +271,7 @@ final class Desugar: CompilerPhase, RawASTVisitor {
         _ attributedNode: RawAttributedNode,
         _ info: DesugaringContext
     ) -> DesugaringBridgeToAST {
-        var node = attributedNode.node.acceptVisitor(self, .funcIsEntryPoint)
+        let node = attributedNode.node.acceptVisitor(self, .funcIsEntryPoint)
         switch node {
         case .topLevel:
             return node

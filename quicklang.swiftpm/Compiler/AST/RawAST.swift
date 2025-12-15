@@ -75,6 +75,16 @@ protocol RawASTVisitor {
         _ attributedNode: RawAttributedNode,
         _ info: VisitorInfo
     ) -> VisitorResult
+    
+    func visitRawConditionalBlock(
+        _ block: RawConditionalBlock,
+        _ info: VisitorInfo
+    ) -> VisitorResult
+    
+    func visitRawBlockStatement(
+        _ block: RawBlockStatement,
+        _ info: VisitorInfo
+    ) -> VisitorResult
 }
 
 typealias RawIdentifiableName = (String, UUID)
@@ -488,7 +498,32 @@ final class RawBinaryOperation: RawExpressionNode {
     }
 }
 
-final class RawLetDefinition: RawDefinitionNode  {
+final class RawBlockStatement: RawASTNode {
+    let id = UUID()
+    var statements: [any RawBlockLevelNode]
+    var scope: RawASTScope?
+    
+    init(statements: [any RawBlockLevelNode]) {
+        self.statements = statements
+        self.isIncomplete = false
+    }
+    
+    var isIncomplete: Bool
+    static var incomplete: RawBlockStatement {
+        return RawBlockStatement()
+    }
+    
+    private init() {
+        self.isIncomplete = true
+        self.statements = []
+    }
+    
+    func acceptVisitor<V: RawASTVisitor>(_ visitor: V, _ info: V.VisitorInfo) -> V.VisitorResult {
+        visitor.visitRawBlockStatement(self, info)
+    }
+}
+
+final class RawLetDefinition: RawDefinitionNode {
     let id = UUID()
     let name: String
     let type: TypeName
@@ -581,7 +616,7 @@ final class RawFuncDefinition: RawTopLevelNode {
     let name: String
     let type: TypeName
     let parameters: [Parameter]
-    let body: [any RawBlockLevelNode]
+    let body: RawBlockStatement
     var scope: RawASTScope?
     
     let isIncomplete: Bool
@@ -594,11 +629,11 @@ final class RawFuncDefinition: RawTopLevelNode {
         self.name = ""
         self.type = .Int
         self.parameters = []
-        self.body = []
+        self.body = .incomplete
         self.isIncomplete = true
     }
     
-    init(name: String, type: TypeName, parameters: [Parameter], body: [any RawBlockLevelNode]) {
+    init(name: String, type: TypeName, parameters: [Parameter], body: RawBlockStatement) {
         self.name = name
         self.type = type
         self.parameters = parameters
@@ -640,31 +675,55 @@ final class RawFuncApplication: RawExpressionNode, RawBlockLevelNode {
     }
 }
 
-final class RawIfStatement: RawStatementNode, RawBlockLevelNode {
-    let id = UUID()
+final class RawConditionalBlock: RawASTNode {
+    var id = UUID()
     let condition: any RawExpressionNode
-    let thenBranch: [any RawBlockLevelNode]
-    let elseBranch: [any RawBlockLevelNode]?
+    let body: RawBlockStatement
     var scope: RawASTScope?
     
-    let isIncomplete: Bool
+    init(condition: any RawExpressionNode, body: RawBlockStatement) {
+        self.condition = condition
+        self.body = body
+        self.isIncomplete = false
+    }
     
+    var isIncomplete: Bool
+    static var incomplete: RawConditionalBlock {
+        RawConditionalBlock()
+    }
+    
+    private init() {
+        self.isIncomplete = true
+        self.condition = RawBooleanExpression.incomplete
+        self.body = .incomplete
+    }
+    
+    func acceptVisitor<V: RawASTVisitor>(_ visitor: V, _ info: V.VisitorInfo) -> V.VisitorResult {
+        visitor.visitRawConditionalBlock(self, info)
+    }
+}
+
+final class RawIfStatement: RawStatementNode, RawBlockLevelNode {
+    let id = UUID()
+    let conditionalBlocks: [RawConditionalBlock]
+    let elseBranch: RawBlockStatement?
+    var scope: RawASTScope?
+    
+    init(conditionalBlocks: [RawConditionalBlock], elseBranch: RawBlockStatement? = nil) {
+        self.conditionalBlocks = conditionalBlocks
+        self.elseBranch = elseBranch
+        self.isIncomplete = false
+    }
+    
+    let isIncomplete: Bool
     static var incomplete: RawIfStatement {
         return RawIfStatement()
     }
     
     private init() {
-        self.condition = RawIdentifierExpression.incomplete
-        self.thenBranch = []
+        self.conditionalBlocks = []
         self.elseBranch = nil
         self.isIncomplete = true
-    }
-    
-    init(condition: any RawExpressionNode, thenBranch: [any RawBlockLevelNode], elseBranch: [any RawBlockLevelNode]?) {
-        self.condition = condition
-        self.thenBranch = thenBranch
-        self.elseBranch = elseBranch
-        self.isIncomplete = false
     }
     
     func acceptVisitor<V: RawASTVisitor>(_ visitor: V, _ info: V.VisitorInfo) -> V.VisitorResult {
@@ -677,6 +736,11 @@ final class RawReturnStatement: RawStatementNode, RawBlockLevelNode {
     let expression: any RawExpressionNode
     var scope: RawASTScope?
     
+    init(expression: any RawExpressionNode) {
+        self.expression = expression
+        self.isIncomplete = false
+    }
+    
     let isIncomplete: Bool
     static var incomplete: RawReturnStatement {
         return RawReturnStatement()
@@ -685,11 +749,6 @@ final class RawReturnStatement: RawStatementNode, RawBlockLevelNode {
     private init() {
         self.expression = RawIdentifierExpression.incomplete
         self.isIncomplete = true
-    }
-    
-    init(expression: any RawExpressionNode) {
-        self.expression = expression
-        self.isIncomplete = false
     }
     
     func acceptVisitor<V: RawASTVisitor>(_ visitor: V, _ info: V.VisitorInfo) -> V.VisitorResult {
@@ -703,15 +762,15 @@ final class RawAssignmentStatement: RawStatementNode, RawBlockLevelNode {
     let expression: any RawExpressionNode
     var scope: RawASTScope?
     
-    var isIncomplete: Bool
-    static var incomplete: RawAssignmentStatement {
-        return RawAssignmentStatement()
-    }
-    
     init(name: String, expression: any RawExpressionNode) {
         self.name = name
         self.expression = expression
         self.isIncomplete = false
+    }
+    
+    var isIncomplete: Bool
+    static var incomplete: RawAssignmentStatement {
+        return RawAssignmentStatement()
     }
     
     private init() {
