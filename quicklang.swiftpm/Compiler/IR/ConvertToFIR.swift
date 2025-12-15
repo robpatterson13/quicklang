@@ -297,7 +297,11 @@ final class ConvertToRawFIR: CompilerPhase, ASTVisitor {
         var shouldDropTerminator = false
         
         let finishCurrentBlock: (FIRTerminator, Expectation?) -> Void = { [self] terminator, newExpectation in
-            let block = onParseTerminator(terminator, label: currentLabel, items: currentBlockItems)
+            guard let currentLabelCast = currentLabel as? FIRLabel else {
+                fatalError("Can't finish a block without a label")
+            }
+            let copy = currentLabelCast.copy()
+            let block = onParseTerminator(terminator, label: copy, items: currentBlockItems)
             blocks.append(block)
             
             currentBlockItems = []
@@ -361,13 +365,9 @@ final class ConvertToRawFIR: CompilerPhase, ASTVisitor {
     
     private func onParseTerminator(
         _ terminator: FIRTerminator,
-        label: FIRLabelRepresentable,
+        label: FIRLabel,
         items: [FIRBasicBlockItem]
     ) -> FIRBasicBlock {
-        guard let label = label as? FIRLabel else {
-            fatalError("Cannot finish a block with a label hole")
-        }
-        
         return .init(label: label, statements: items, terminator: terminator)
     }
 }

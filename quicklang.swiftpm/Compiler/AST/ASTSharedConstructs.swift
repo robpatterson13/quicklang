@@ -48,6 +48,10 @@ enum TypeName: Equatable {
 enum UnaryOperator {
     case not
     case neg
+    
+    var isBoolean: Bool {
+        return self == .not
+    }
 }
 
 enum BinaryOperator {
@@ -57,4 +61,13 @@ enum BinaryOperator {
     
     case and
     case or
+    
+    var isBoolean: Bool {
+        switch self {
+        case .and, .or:
+            return true
+        default:
+            return false
+        }
+    }
 }

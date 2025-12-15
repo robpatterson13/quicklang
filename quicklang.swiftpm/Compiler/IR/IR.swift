@@ -243,6 +243,14 @@ final class FIRLabel: FIRLabelRepresentable {
     init(name: String) {
         self.name = name
     }
+    
+    // had an issue where the labels weren't being retained
+    // copy lets us make a new one that the block can own
+    // this keeps it from being collected during parsing the
+    // basic blocks in ConvertToFIR
+    func copy() -> Self {
+        .init(name: name)
+    }
 }
 
 final class FIRLabelHole: FIRLabelRepresentable {

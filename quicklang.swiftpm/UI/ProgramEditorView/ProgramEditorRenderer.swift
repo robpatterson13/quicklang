@@ -38,10 +38,10 @@ class ProgramEditorRenderer {
     ) {
         mapping.forEach { (syntaxType, tokens) in
             switch syntaxType {
+            case .booleanLiteral:
+                doSyntaxHighlightingForBooleanLiterals(tokens, on: &text)
             case .keyword:
                 doSyntaxHighlightingForKeywords(tokens, on: &text)
-            case .booleanLiteral:
-                return
             case .numLiteral:
                 doSyntaxHighlightingForNumLiterals(tokens, on: &text)
             case .identifier:
@@ -69,6 +69,15 @@ class ProgramEditorRenderer {
     ) {
         tokens.forEach { (_, range) in
             text.addAttributes(theme.keyword, range: range)
+        }
+    }
+    
+    private func doSyntaxHighlightingForBooleanLiterals(
+        _ tokens: [LexerSyntaxInfoManager.SyntaxInfo],
+        on text: inout NSMutableAttributedString
+    ) {
+        tokens.forEach { (_, range) in
+            text.addAttributes(theme.booleanLiteral, range: range)
         }
     }
     
