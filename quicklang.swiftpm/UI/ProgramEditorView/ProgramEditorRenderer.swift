@@ -50,6 +50,8 @@ class ProgramEditorRenderer {
                 return
             case .funcIdentifier:
                 doSyntaxHighlightingForFuncIdentifiers(tokens, on: &text)
+            case .typeName:
+                doSyntaxHighlightingForTypeNames(tokens, on: &text)
             }
         }
     }
@@ -60,6 +62,15 @@ class ProgramEditorRenderer {
     ) {
         tokens.forEach { (_, range) in
             text.addAttributes(theme.funcIdentifier, range: range)
+        }
+    }
+    
+    private func doSyntaxHighlightingForTypeNames(
+        _ tokens: [LexerSyntaxInfoManager.SyntaxInfo],
+        on text: inout NSMutableAttributedString
+    ) {
+        tokens.forEach { (_, range) in
+            text.addAttributes(theme.typeName, range: range)
         }
     }
     

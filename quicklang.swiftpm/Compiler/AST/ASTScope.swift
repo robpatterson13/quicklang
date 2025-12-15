@@ -55,6 +55,10 @@ final class ASTScope {
         self.decls = decls
     }
     
+    func copy() -> Self {
+        .init(isGlobal: isGlobal, parent: parent, child: child, decls: decls)
+    }
+    
     func newChild(with decl: IntroducedBinding) -> ASTScope {
         let child = ASTScope(isGlobal: false, parent: self, decls: [decl])
         self.child = child

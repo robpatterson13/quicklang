@@ -52,6 +52,8 @@ enum Token {
             return (3, 4)
         case "*", "/":
             return (5, 6)
+        case "!":
+            return (7, 8)
         default:
             fatalError("Binding power of \(op) not yet implemented")
         }
@@ -124,6 +126,11 @@ extension Token {
     
     static let LET: Token = .buildKeyword("let")
     static let VAR: Token = .buildKeyword("var")
+    
+    static let INTTYPE: Token = .buildKeyword("Int")
+    static let BOOLTYPE: Token = .buildKeyword("Bool")
+    static let STRINGTYPE: Token = .buildKeyword("String")
+    static let VOIDTYPE: Token = .buildKeyword("Void")
     
     private static func buildKeyword(_ keyword: String) -> Token {
         return .Keyword(keyword, location: .dummySourceCodeLocation)

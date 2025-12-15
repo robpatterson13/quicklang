@@ -723,16 +723,16 @@ final class Parser: CompilerPhase {
             }
             
             var opVal: BinaryOperator
-            switch op.value {
-            case "+":
+            switch op {
+            case .PLUS:
                 opVal = BinaryOperator.plus
-            case "-":
+            case .MINUS:
                 opVal = BinaryOperator.minus
-            case "*":
+            case .STAR:
                 opVal = BinaryOperator.times
-            case "&&":
+            case .AND:
                 opVal = BinaryOperator.and
-            case "||":
+            case .OR:
                 opVal = BinaryOperator.or
             default:
                 fatalError() // TODO: unreachable with current grammar
@@ -904,12 +904,14 @@ final class Parser: CompilerPhase {
         }
         
         switch nextToken {
-        case .Keyword(let kw, _) where kw == "Int":
+        case .INTTYPE:
             return .Int
-        case .Keyword(let kw, _) where kw == "Bool":
+        case .BOOLTYPE:
             return .Bool
-        case .Keyword(let kw, _) where kw == "String":
+        case .STRINGTYPE:
             return .String
+        case .VOIDTYPE:
+            return .Void
         default:
             let strategy = self.error(.expectedTypeIdentifier(where: location))
             recover(using: strategy)

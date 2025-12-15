@@ -13,6 +13,7 @@ final class LexerSyntaxInfoManager {
         case keyword
         case booleanLiteral
         case numLiteral
+        case typeName
         case identifier
         case symbol
         case funcIdentifier
@@ -21,6 +22,8 @@ final class LexerSyntaxInfoManager {
             switch token {
             case .Identifier:
                 return .identifier
+            case .INTTYPE, .BOOLTYPE, .STRINGTYPE, .VOIDTYPE:
+                return .typeName
             case .Keyword:
                 return .keyword
             case .Number:
@@ -193,8 +196,9 @@ final class Lexer: CompilerPhase {
             fallthrough
         case "func", "return":
             fallthrough
-        case "Int", "Bool", "String":
-            fallthrough
+        case "Int", "Bool", "String", "Void":
+            token = .Keyword(lexeme, location: locationBuilder.build())
+            syntaxManager.addMapping(for: token, at: currentCharIndex)
         case "let", "var":
             fallthrough
         case "if", "else":

@@ -5,6 +5,108 @@
 //  Created by Rob Patterson on 2/16/25.
 //
 
+class GetAllReturnStatements: ASTVisitor {
+    typealias VisitorResult = [ReturnStatement]
+    typealias VisitorInfo = Void
+    
+    func visitIdentifierExpression(
+        _ expression: IdentifierExpression,
+        _ info: Void
+    ) -> [ReturnStatement] {
+        []
+    }
+    
+    func visitBooleanExpression(
+        _ expression: BooleanExpression,
+        _ info: Void
+    ) -> [ReturnStatement] {
+        []
+    }
+    
+    func visitNumberExpression(
+        _ expression: NumberExpression,
+        _ info: Void
+    ) -> [ReturnStatement] {
+        []
+    }
+    
+    func visitUnaryOperation(
+        _ operation: UnaryOperation,
+        _ info: Void
+    ) -> [ReturnStatement] {
+        []
+    }
+    
+    func visitBinaryOperation(
+        _ operation: BinaryOperation,
+        _ info: Void
+    ) -> [ReturnStatement] {
+        []
+    }
+    
+    func visitDefinition(
+        _ definition: DefinitionNode,
+        _ info: Void
+    ) -> [ReturnStatement] {
+        []
+    }
+    
+    private func processBlock(
+        _ block: [any BlockLevelNode]
+    ) -> [ReturnStatement] {
+        var returns: [ReturnStatement] = []
+        for node in block {
+            let returnStatements = node.acceptVisitor(self)
+            returns.append(contentsOf: returnStatements)
+        }
+        
+        return returns
+    }
+    
+    func visitFuncDefinition(
+        _ definition: FuncDefinition,
+        _ info: Void
+    ) -> [ReturnStatement] {
+        processBlock(definition.body)
+    }
+    
+    func visitFuncApplication(
+        _ expression: FuncApplication,
+        _ info: Void
+    ) -> [ReturnStatement] {
+        []
+    }
+    
+    func visitIfStatement(
+        _ statement: IfStatement,
+        _ info: Void
+    ) -> [ReturnStatement] {
+        let thenBranchReturns = processBlock(statement.thenBranch)
+        if let elseBranch = statement.elseBranch {
+            let elseBranchReturns = processBlock(elseBranch)
+            return thenBranchReturns + elseBranchReturns
+        }
+        
+        return thenBranchReturns
+        
+    }
+    
+    func visitReturnStatement(
+        _ statement: ReturnStatement,
+        _ info: Void
+    ) -> [ReturnStatement] {
+        [statement]
+    }
+    
+    func visitAssignmentStatement(
+        _ statement: AssignmentStatement,
+        _ info: Void
+    ) -> [ReturnStatement] {
+        []
+    }
+    
+}
+
 class InferType: ASTVisitor {
     typealias VisitorInfo = Void
     typealias VisitorResult = TypeName?
@@ -117,11 +219,15 @@ class Typechecker: SemaPass, ASTVisitor {
     }
     
     let context: ASTContext
-    let typeInferrer: InferType
+    lazy var typeInferrer: InferType = Self.initTypeInferrer(self)
+    lazy var returnStatementGrabber: GetAllReturnStatements = .init()
     
     init(context: ASTContext) {
         self.context = context
-        self.typeInferrer = .init(context: context)
+    }
+    
+    private static func initTypeInferrer(_ self: Typechecker) -> InferType {
+        .init(context: self.context)
     }
     
     private func addError(_ error: TypecheckerErrorType, at location: SourceCodeLocation) {
@@ -180,22 +286,14 @@ class Typechecker: SemaPass, ASTVisitor {
             node.acceptVisitor(self)
         }
         
-//        let returnStmt = definition.body.first { $0 is ReturnStatement } as? ReturnStatement
-//        let returnType = definition.type.returnType
-//        
-//        if let returnType, returnStmt == nil && returnType != .Void {
-//            addError(.funcReturnTypeMismatch(defined: returnType), at: .beginningOfFile)
-//            return
-//        }
-//        
-//        if returnStmt != nil, let returnType, returnType == .Void {
-//            addError(.voidCannotReturnValue, at: .beginningOfFile)
-//            return
-//        }
-//        
-//        if let returnStmt, let returnType {
-//            checkExpression(returnStmt.expression, is: returnType, error: .funcReturnTypeMismatch(defined: returnType))
-//        }
+        guard let returnType = definition.type.returnType else {
+            fatalError("All funcs should have a return type at this point")
+        }
+        let returns = definition.body.flatMap { $0.acceptVisitor(returnStatementGrabber) }
+        
+        for returnStmt in returns {
+            checkExpression(returnStmt.expression, is: returnType, error: .funcReturnTypeMismatch(defined: returnType))
+        }
     }
     
     func visitFuncApplication(_ expression: FuncApplication, _ info: Void) {

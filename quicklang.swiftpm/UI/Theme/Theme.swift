@@ -20,6 +20,10 @@ struct Theme {
                 .foregroundColor: UIColor(red: 212 / 255, green: 102 / 255, blue: 149 / 255, alpha: 1),
                 .font: UIFont(name: "Menlo-Bold", size: 18) as Any
             ],
+            typeName: [
+                .foregroundColor: UIColor(red: 218 / 255, green: 186 / 255, blue: 255 / 255, alpha: 1),
+                .font: UIFont(name: "Menlo", size: 18) as Any
+            ],
             numLiteral: [
                 .foregroundColor: UIColor(red: 218 / 255, green: 200 / 255, blue: 124 / 255, alpha: 1)
             ],
@@ -36,6 +40,7 @@ struct Theme {
     private init(
         plainText: [NSAttributedString.Key : Any],
         keyword: [NSAttributedString.Key : Any],
+        typeName: [NSAttributedString.Key : Any],
         numLiteral: [NSAttributedString.Key : Any],
         booleanLiteral: [NSAttributedString.Key : Any],
         funcIdentifier: [NSAttributedString.Key : Any]
@@ -45,12 +50,14 @@ struct Theme {
         self.numLiteral = numLiteral
         self.booleanLiteral = booleanLiteral
         self.funcIdentifier = funcIdentifier
+        self.typeName = typeName
     }
     
     let font = UIFont(name: "Menlo", size: 18)
     let plainText: [NSAttributedString.Key : Any]
     let keyword: [NSAttributedString.Key: Any]
     let numLiteral: [NSAttributedString.Key: Any]
+    let typeName: [NSAttributedString.Key : Any]
     let booleanLiteral: [NSAttributedString.Key: Any]
     let funcIdentifier: [NSAttributedString.Key: Any]
 }
