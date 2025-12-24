@@ -219,7 +219,7 @@ final class ConvertToRawFIR: CompilerPhase, ASTVisitor {
         }
         
         let entryLabel = FIRLabel(name: "\(definition.name)$entry")
-        var parsedBody = parseIntoBasicBlocks(body, nil, entryLabel, branchValueToSynthesize: .topLevel(branch: returnName))
+        var parsedBody = parseIntoBasicBlocks(body, entryLabel)
         
         let returnParameter = FIRParameter(name: returnName, type: .convertFrom(definition.type.returnType!))
         let returnIdentifier = FIRIdentifier(name: returnName)
@@ -361,6 +361,11 @@ final class ConvertToRawFIR: CompilerPhase, ASTVisitor {
     ) -> [FIRVisitResult] {
         var nodes: [FIRVisitResult] = []
         for node in block {
+            // we need a continuation point if we have some scope that is implicitly dropped,
+            // eg. we are in an if statement within a function and we need jump back out
+            // of the if statement and into the function body. this isn't made explicit by
+            // the syntax of the program, so it needs to be done when we are processing a block
+            // (aka scope)
             if node.needsContinuationPoint() {
                 let continuationName = GenSymInfo.singleton.genSym(root: "needs$continuation$", id: nil)
                 let result = node.acceptVisitor(self, info)
@@ -378,33 +383,17 @@ final class ConvertToRawFIR: CompilerPhase, ASTVisitor {
         return nodes
     }
     
-    enum Expectation {
-        case nextIsLabel
-    }
-    
-    enum BranchExpressionToSynthesize {
-        case topLevel(branch: String)
-        case branchToIfJoin(branch: String)
-    }
-    
-    // branchValueToSynthesize tells us if we need to synthesize a return of a void value
-    // this allows us to have `return ()` be implicit
-    // it also allows us to find control flow paths that don't return in a
-    // non-void function
     private func parseIntoBasicBlocks(
         _ result: [FIRVisitResult],
-        _ anyExpectation: Expectation? = nil,
-        _ initialLabel: FIRLabelRepresentable = FIRLabelHole(),
-        branchValueToSynthesize: BranchExpressionToSynthesize? = nil
+        _ initialLabel: FIRLabelRepresentable = FIRLabelHole()
     ) -> [FIRBasicBlock] {
         
-        var expectation: Expectation? = anyExpectation
         var blocks: [FIRBasicBlock] = []
         var currentBlockItems: [FIRBasicBlockItem] = []
         var currentLabel: FIRLabelRepresentable = initialLabel
         var shouldDropTerminator = false
         
-        let finishCurrentBlock: (FIRTerminator, Expectation?) -> Void = { [self] terminator, newExpectation in
+        let finishCurrentBlock: (FIRTerminator) -> Void = { [self] terminator in
             guard let currentLabelCast = currentLabel as? FIRLabel else {
                 InternalCompilerError.unreachable("Can't finish a block without a label")
             }
@@ -413,13 +402,11 @@ final class ConvertToRawFIR: CompilerPhase, ASTVisitor {
             
             currentBlockItems = []
             currentLabel = FIRLabelHole()
-            expectation = newExpectation
             shouldDropTerminator = true
         }
         
         let markLabel: (FIRLabelRepresentable) -> Void = { label in
             currentLabel = label.copy()
-            expectation = nil
         }
         
         let handleIf: (
@@ -428,15 +415,14 @@ final class ConvertToRawFIR: CompilerPhase, ASTVisitor {
             _ elseBlock: [FIRVisitResult]?,
             _ joinLabel: FIRLabelRepresentable?
         ) -> Void = { [self] terminator, thenBlock, elseBlock, joinLabel in
-            finishCurrentBlock(terminator, nil)
-            let thenBasicBlock = parseIntoBasicBlocks(thenBlock, .nextIsLabel)
+            finishCurrentBlock(terminator)
+            let thenBasicBlock = parseIntoBasicBlocks(thenBlock)
             blocks.append(contentsOf: thenBasicBlock)
             if let elseBlockRaw = elseBlock {
-                let elseBasicBlock = parseIntoBasicBlocks(elseBlockRaw, .nextIsLabel)
+                let elseBasicBlock = parseIntoBasicBlocks(elseBlockRaw)
                 blocks.append(contentsOf: elseBasicBlock)
             }
             if let joinLabel {
-                expectation = .nextIsLabel
                 markLabel(joinLabel)
             }
         }
@@ -455,7 +441,7 @@ final class ConvertToRawFIR: CompilerPhase, ASTVisitor {
                         continue
                     }
                 } else {
-                    finishCurrentBlock(terminator.copy(), .nextIsLabel)
+                    finishCurrentBlock(terminator.copy())
                 }
                 
             case .label(let label):
