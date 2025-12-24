@@ -255,7 +255,7 @@ class ASTLinearize: SemaPass, ASTVisitor {
             newElseBranch = linearizeBlock(elseBranch)
         }
         
-        let newIfStatement = IfStatement(condition: newCond, thenBranch: newThenBranch, elseBranch: newElseBranch)
+        let newIfStatement = statement.initFromOld(condition: newCond, thenBranch: newThenBranch, elseBranch: newElseBranch)
         let result = LinearizedNodeResult.node(newIfStatement)
         return (result, bindings, .yes)
     }
@@ -325,7 +325,7 @@ final class GenSymInfo: @unchecked Sendable {
         }
     }
     
-    func genSym(root: String, id: UUID) -> String {
+    func genSym(root: String, id: UUID?) -> String {
         return root + "_$\(tag)$"
     }
     

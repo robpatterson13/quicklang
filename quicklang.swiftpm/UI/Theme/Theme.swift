@@ -7,7 +7,6 @@
 
 import UIKit
 
-// always cast UIFont to Any, you'll get a warning for some reason
 struct Theme {
     
     static var `default`: Theme {

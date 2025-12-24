@@ -107,6 +107,7 @@ class ASTContext {
     }
     
     var symbols: [String: TypeName] = [:]
+    var cfgMapping: [String: FIRBasicBlock] = [:]
     
     init(rawTree: RawTopLevel = RawTopLevel(sections: [])) {
         self.rawTree = rawTree
@@ -143,6 +144,14 @@ class ASTContext {
         }
         
         return topLevelNodes
+    }
+    
+    func addCFGMapping(_ name: String, _ block: FIRBasicBlock) {
+        cfgMapping[name] = block
+    }
+    
+    func blockWithName(_ name: String) -> FIRBasicBlock? {
+        cfgMapping[name]
     }
     
     func getTypeOf(symbol: String) -> TypeName? {

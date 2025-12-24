@@ -224,7 +224,7 @@ final class Desugar: CompilerPhase, RawASTVisitor {
             fatalError("Empty if statement is not possible")
         }
         
-        let elseBranch = statement.elseBranch?.acceptVisitor(self, .nothing).unwrapBlock() ?? nil
+        let elseBranch = statement.elseBranch?.acceptVisitor(self, .nothing).unwrapBlock()
         let innermostIfElseStatement = IfStatement(
             condition: lastCond,
             thenBranch: lastBlock,
@@ -235,8 +235,17 @@ final class Desugar: CompilerPhase, RawASTVisitor {
             return .blockLevel(innermostIfElseStatement)
         }
         
+        let firstBlock = blocks.first!
+        let outermostIfElseStatement = IfStatement(
+            condition: firstBlock.0,
+            thenBranch: firstBlock.1,
+            elseBranch: nil
+        )
+        
+        innermostIfElseStatement.desugaredFrom = outermostIfElseStatement.id.uuidString
+        
         var lastIfStatement = innermostIfElseStatement
-        for (cond, block) in blocks.reversed()[1...] {
+        for (cond, block) in blocks.reversed()[1..<blocks.count - 1] {
             let newElse = [lastIfStatement]
             
             lastIfStatement = IfStatement(
@@ -244,9 +253,13 @@ final class Desugar: CompilerPhase, RawASTVisitor {
                 thenBranch: block,
                 elseBranch: newElse
             )
+            
+            lastIfStatement.desugaredFrom = outermostIfElseStatement.id.uuidString
         }
         
-        return .blockLevel(lastIfStatement)
+        outermostIfElseStatement.elseBranch = [lastIfStatement]
+        
+        return .blockLevel(outermostIfElseStatement)
     }
     
     func visitRawReturnStatement(

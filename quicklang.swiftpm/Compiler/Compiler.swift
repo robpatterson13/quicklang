@@ -75,9 +75,6 @@ class Compiler {
         switch startDesugaring(parseResult, settings: settings) {
         case .success(result: let result):
             desugaredResult = result
-            print("DESUGARED")
-            dump(result.tree)
-            print("END DESUGARED")
         case .failure:
             onFailure()
             return

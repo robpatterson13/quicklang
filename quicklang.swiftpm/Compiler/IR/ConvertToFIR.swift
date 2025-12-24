@@ -5,21 +5,112 @@
 //  Created by Rob Patterson on 12/1/25.
 //
 
+import Foundation
+
+struct FIRVisitInfo: @unchecked Sendable {
+    // used for AST constructs that can appear
+    // in both expression position and as a statement in a block
+    // as an example, function application
+    enum FIRVisitContext {
+        case blockLevelItem
+        case asAnExpression
+        case fromTopLevel
+    }
+    
+    let context: FIRVisitContext
+    let parentBlockName: String?
+    let endWithBranchToHere: String?
+    
+    typealias ReturnBranchInfo = String
+    let returnBranch: ReturnBranchInfo?
+    
+    private init(
+        context: FIRVisitContext,
+        parentBlockName: String?,
+        endWithBranchToHere: String? = nil,
+        returnBranch: ReturnBranchInfo? = nil
+    ) {
+        self.context = context
+        self.parentBlockName = parentBlockName
+        self.endWithBranchToHere = endWithBranchToHere
+        self.returnBranch = returnBranch
+    }
+    
+    static let asAnExpression: Self = .init(context: .asAnExpression, parentBlockName: nil)
+    static let blockLevelItem: Self = .init(context: .blockLevelItem, parentBlockName: nil)
+    static let fromTopLevel: Self = .init(context: .fromTopLevel, parentBlockName: nil)
+    
+    func withParentBlock(name: String) -> FIRVisitInfo {
+        .init(
+            context: context,
+            parentBlockName: name,
+            endWithBranchToHere: endWithBranchToHere,
+            returnBranch: returnBranch
+        )
+    }
+    
+    func addFinalBranchTo(name: String) -> FIRVisitInfo {
+        .init(
+            context: context,
+            parentBlockName: parentBlockName,
+            endWithBranchToHere: name,
+            returnBranch: returnBranch
+        )
+    }
+    
+    func addReturnBranch(info: ReturnBranchInfo?) -> FIRVisitInfo {
+        .init(
+            context: context,
+            parentBlockName: parentBlockName,
+            endWithBranchToHere: endWithBranchToHere,
+            returnBranch: info
+        )
+    }
+}
+
+enum FIRVisitResult {
+    case statement(any FIRBasicBlockItem)
+    case expression(any FIRExpression)
+    case terminator(any FIRTerminator)
+    case label(FIRLabel)
+    case function(FIRFunction)
+    
+    indirect case ifStatement(
+        terminator: any FIRTerminator,
+        thenBlock: [FIRVisitResult],
+        elseBlock: [FIRVisitResult]?,
+        joinLabel: FIRLabel? // optional because desugared if statements are already taken care of
+    )
+    
+    func unwrapExpression() -> any FIRExpression {
+        switch self {
+        case .expression(let expression):
+            return expression
+        default:
+            InternalCompilerError.unreachable("Cannot unwrap non-FIRExpression as FIRExpression")
+        }
+    }
+}
+
 final class ConvertToRawFIR: CompilerPhase, ASTVisitor {
     
     typealias InputType = ASTContext
     typealias SuccessfulResult = FIRModule
     
+    var context: ASTContext?
     var errorManager: CompilerErrorManager?
     
+    let shortCircuitingForIfStatementCondition = ShortCircuitingForIfStatementCondition()
+    
+    private var ifStatementEndBlockMapping: [String: String] = [:]
+    
     func begin(_ input: ASTContext) -> PhaseResult<ConvertToRawFIR> {
-        var nodes: [any FIRNode] = []
+        var nodes: [FIRFunction] = []
+        self.context = input
         
         input.tree.sections.forEach { node in
             let result = node.acceptVisitor(self, .fromTopLevel)
             switch result {
-            case .statement(let statement):
-                nodes.append(statement)
             case .function(let function):
                 nodes.append(function)
                 
@@ -28,63 +119,22 @@ final class ConvertToRawFIR: CompilerPhase, ASTVisitor {
             }
         }
         
-        return .success(result: FIRModule(nodes: nodes))
+        addBasicBlocksToContext(nodes)
+        let module = FIRModule(nodes: nodes)
+        shortCircuitingForIfStatementCondition.begin(module)
+        return .success(result: module)
+    }
+    
+    private func addBasicBlocksToContext(_ functions: [FIRFunction]) {
+        for function in functions {
+            for block in function.blocks {
+                context?.addCFGMapping(block.label.name, block)
+            }
+        }
     }
     
     init(errorManager: CompilerErrorManager, settings: DriverSettings) {
         self.errorManager = errorManager
-    }
-    
-    
-    struct FIRVisitInfo {
-        // used for AST constructs that can appear
-        // in both expression position and as a statement in a block
-        // as an example, function application
-        enum FIRVisitContext {
-            case blockLevelItem
-            case asAnExpression
-            case fromTopLevel
-        }
-        
-        let context: FIRVisitContext
-        let parentBlockName: String?
-        
-        private init(context: FIRVisitContext, parentBlockName: String?) {
-            self.context = context
-            self.parentBlockName = parentBlockName
-        }
-        
-        static let asAnExpression: Self = .init(context: .asAnExpression, parentBlockName: nil)
-        static let blockLevelItem: Self = .init(context: .blockLevelItem, parentBlockName: nil)
-        static let fromTopLevel: Self = .init(context: .fromTopLevel, parentBlockName: nil)
-        
-        func withParentBlock(name: String) -> FIRVisitInfo {
-            .init(context: context, parentBlockName: name)
-        }
-    }
-    
-    enum FIRVisitResult {
-        case statement(any FIRBasicBlockItem)
-        case expression(any FIRExpression)
-        case terminator(any FIRTerminator)
-        case label(FIRLabel)
-        case function(FIRFunction)
-        
-        indirect case ifStatement(
-            terminator: any FIRTerminator,
-            thenBlock: [FIRVisitResult],
-            elseBlock: [FIRVisitResult]?,
-            joinLabel: FIRLabel
-        )
-        
-        func unwrapExpression() -> any FIRExpression {
-            switch self {
-            case .expression(let expression):
-                return expression
-            default:
-                fatalError("Cannot unwrap non-FIRExpression as FIRExpression")
-            }
-        }
     }
     
     func visitIdentifierExpression(
@@ -92,7 +142,7 @@ final class ConvertToRawFIR: CompilerPhase, ASTVisitor {
         _ info: FIRVisitInfo
     ) -> FIRVisitResult {
         let expression = FIRIdentifier(name: expression.name)
-        return .expression(expression)
+        return .expression(expression.copy())
     }
     
     func visitBooleanExpression(
@@ -100,7 +150,7 @@ final class ConvertToRawFIR: CompilerPhase, ASTVisitor {
         _ info: FIRVisitInfo
     ) -> FIRVisitResult {
         let expression = FIRBoolean(value: expression.value)
-        return .expression(expression)
+        return .expression(expression.copy())
     }
     
     func visitNumberExpression(
@@ -108,7 +158,7 @@ final class ConvertToRawFIR: CompilerPhase, ASTVisitor {
         _ info: FIRVisitInfo
     ) -> FIRVisitResult {
         let expression = FIRInteger(value: expression.value)
-        return .expression(expression)
+        return .expression(expression.copy())
     }
     
     func visitUnaryOperation(
@@ -121,7 +171,7 @@ final class ConvertToRawFIR: CompilerPhase, ASTVisitor {
             expr: expression.unwrapExpression()
         )
         
-        return .expression(unaryExpression)
+        return .expression(unaryExpression.copy())
     }
     
     func visitBinaryOperation(
@@ -136,33 +186,52 @@ final class ConvertToRawFIR: CompilerPhase, ASTVisitor {
             rhs: rhs.unwrapExpression()
         )
         
-        return .expression(binaryExpression)
+        return .expression(binaryExpression.copy())
     }
     
     func visitDefinition(
         _ definition: DefinitionNode,
         _ info: FIRVisitInfo
     ) -> FIRVisitResult {
-        let value = definition.expression.acceptVisitor(self, info)
+        let value = definition.expression.acceptVisitor(self, .asAnExpression.withParentBlock(name: info.parentBlockName!))
         let assignment = FIRAssignment(name: definition.name, value: value.unwrapExpression())
         
-        return .statement(assignment)
+        return .statement(assignment.copy())
     }
     
     func visitFuncDefinition(
         _ definition: FuncDefinition,
         _ info: FIRVisitInfo
     ) -> FIRVisitResult {
+        let returnName = "$0$return"
+        let returnLabel = FIRLabel(name: "\(definition.name)$return")
+        let visitInfo = FIRVisitInfo
+            .blockLevelItem
+            .withParentBlock(name: definition.name)
+            .addReturnBranch(info: returnName)
+        
         let body = processBlock(
             definition.body,
-            .blockLevelItem.withParentBlock(name: definition.name)
+            visitInfo
         )
         let parameters: [FIRParameter] = definition.parameters.map { param in
             return .init(name: param.name, type: .convertFrom(param.type))
         }
         
         let entryLabel = FIRLabel(name: "\(definition.name)$entry")
-        let parsedBody = parseIntoBasicBlocks(body, nil, entryLabel)
+        var parsedBody = parseIntoBasicBlocks(body, nil, entryLabel, branchValueToSynthesize: .topLevel(branch: returnName))
+        
+        let returnParameter = FIRParameter(name: returnName, type: .convertFrom(definition.type.returnType!))
+        let returnIdentifier = FIRIdentifier(name: returnName)
+        let returnInstruction = FIRReturn(value: returnIdentifier)
+        let returnBlock = FIRBasicBlock(
+            label: returnLabel,
+            statements: [],
+            terminator: returnInstruction,
+            parameter: returnParameter
+        )
+        
+        parsedBody.append(returnBlock)
         
         return .function(
             FIRFunction(blocks: parsedBody, parameters: parameters)
@@ -182,9 +251,9 @@ final class ConvertToRawFIR: CompilerPhase, ASTVisitor {
         
         switch info.context {
         case .blockLevelItem, .fromTopLevel:
-            return .statement(callExpression)
+            return .statement(callExpression.copy())
         case .asAnExpression:
-            return .expression(callExpression)
+            return .expression(callExpression.copy())
         }
     }
     
@@ -193,9 +262,10 @@ final class ConvertToRawFIR: CompilerPhase, ASTVisitor {
         _ info: FIRVisitInfo
     ) -> FIRVisitResult {
         let value = statement.expression.acceptVisitor(self, .asAnExpression)
-        let returnStatement = FIRReturn(value: value.unwrapExpression())
+        let label = FIRLabel(name: info.returnBranch!)
+        let branch = FIRBranch(label: label.copy(), value: value.unwrapExpression())
         
-        return .terminator(returnStatement)
+        return .terminator(branch.copy())
     }
     
     func visitAssignmentStatement(
@@ -203,9 +273,9 @@ final class ConvertToRawFIR: CompilerPhase, ASTVisitor {
         _ info: FIRVisitInfo
     ) -> FIRVisitResult {
         let value = statement.expression.acceptVisitor(self, .asAnExpression)
-        let definition = FIRAssignment(name: statement.name, value: value.unwrapExpression())
+        let definition = FIRAssignment(name: statement.name, value: value.unwrapExpression().copy())
         
-        return .statement(definition)
+        return .statement(definition.copy())
     }
     
     private func genName(from node: any ASTNode, root: String, with contextName: String?) -> String {
@@ -224,6 +294,21 @@ final class ConvertToRawFIR: CompilerPhase, ASTVisitor {
         
         let ifName = genName(from: statement, root: "if", with: info.parentBlockName)
         
+        // we want to know if this if statement is the result of a desugaring; if it
+        // is, then we have already cached the join label that we will use instead
+        // of making a new one
+        let joinLabel: FIRLabel
+        if let desugaredFrom = statement.desugaredFrom {
+            // guaranteed that this will be here; any desugared derived if statements
+            // must be processed after the if statement they were desugared from
+            let endBlockName = ifStatementEndBlockMapping[desugaredFrom]!
+            joinLabel = FIRLabel(name: endBlockName)
+        } else {
+            let endBlockName = "\(ifName)$end"
+            joinLabel = FIRLabel(name: endBlockName)
+            ifStatementEndBlockMapping[statement.id.uuidString] = endBlockName
+        }
+        
         let condition = statement.condition.acceptVisitor(self, .asAnExpression)
             .unwrapExpression()
         
@@ -231,7 +316,9 @@ final class ConvertToRawFIR: CompilerPhase, ASTVisitor {
         let thenLabel = FIRLabel(name: thenName)
         let processedThen = processBlock(
             statement.thenBranch,
-            .blockLevelItem.withParentBlock(name: thenName)
+            .blockLevelItem
+                .withParentBlock(name: thenName)
+                .addReturnBranch(info: info.returnBranch)
         )
         
         var processedElse: [FIRVisitResult]? = nil
@@ -240,16 +327,16 @@ final class ConvertToRawFIR: CompilerPhase, ASTVisitor {
         if let elseBranch = statement.elseBranch {
             processedElse = processBlock(
                 elseBranch,
-                .blockLevelItem.withParentBlock(name: elseName)
+                .blockLevelItem
+                    .withParentBlock(name: elseName)
+                    .addReturnBranch(info: info.returnBranch)
             )
         }
         
-        let joinLabel = FIRLabel(name: "\(ifName)$end")
-        
         let branch = FIRConditionalBranch(
-            condition: condition,
-            thenBranch: thenLabel,
-            elseBranch: processedElse == nil ? joinLabel : elseLabel
+            condition: condition.copy(),
+            thenBranch: thenLabel.copy(),
+            elseBranch: (processedElse == nil ? joinLabel : elseLabel).copy()
         )
         
         let branchToJoin = FIRBranch(label: joinLabel)
@@ -261,10 +348,10 @@ final class ConvertToRawFIR: CompilerPhase, ASTVisitor {
         }
         
         return .ifStatement(
-            terminator: branch,
+            terminator: branch.copy(),
             thenBlock: finalThen,
             elseBlock: finalElse,
-            joinLabel: joinLabel
+            joinLabel: statement.isResultOfDesugaring() ? nil : joinLabel.copy()
         )
     }
     
@@ -274,7 +361,18 @@ final class ConvertToRawFIR: CompilerPhase, ASTVisitor {
     ) -> [FIRVisitResult] {
         var nodes: [FIRVisitResult] = []
         for node in block {
-            nodes.append(node.acceptVisitor(self, info))
+            if node.needsContinuationPoint() {
+                let continuationName = GenSymInfo.singleton.genSym(root: "needs$continuation$", id: nil)
+                let result = node.acceptVisitor(self, info)
+                let continuationLabel = FIRLabel(name: continuationName)
+                let branch = FIRBranch(label: continuationLabel.copy())
+                nodes.append(result)
+                nodes.append(.terminator(branch.copy()))
+                nodes.append(.label(continuationLabel))
+            } else {
+                let result = node.acceptVisitor(self, info)
+                nodes.append(result)
+            }
         }
         
         return nodes
@@ -284,10 +382,20 @@ final class ConvertToRawFIR: CompilerPhase, ASTVisitor {
         case nextIsLabel
     }
     
+    enum BranchExpressionToSynthesize {
+        case topLevel(branch: String)
+        case branchToIfJoin(branch: String)
+    }
+    
+    // branchValueToSynthesize tells us if we need to synthesize a return of a void value
+    // this allows us to have `return ()` be implicit
+    // it also allows us to find control flow paths that don't return in a
+    // non-void function
     private func parseIntoBasicBlocks(
         _ result: [FIRVisitResult],
         _ anyExpectation: Expectation? = nil,
-        _ initialLabel: FIRLabelRepresentable = FIRLabelHole()
+        _ initialLabel: FIRLabelRepresentable = FIRLabelHole(),
+        branchValueToSynthesize: BranchExpressionToSynthesize? = nil
     ) -> [FIRBasicBlock] {
         
         var expectation: Expectation? = anyExpectation
@@ -298,10 +406,9 @@ final class ConvertToRawFIR: CompilerPhase, ASTVisitor {
         
         let finishCurrentBlock: (FIRTerminator, Expectation?) -> Void = { [self] terminator, newExpectation in
             guard let currentLabelCast = currentLabel as? FIRLabel else {
-                fatalError("Can't finish a block without a label")
+                InternalCompilerError.unreachable("Can't finish a block without a label")
             }
-            let copy = currentLabelCast.copy()
-            let block = onParseTerminator(terminator, label: copy, items: currentBlockItems)
+            let block = onParseTerminator(terminator, label: currentLabelCast.copy(), items: currentBlockItems)
             blocks.append(block)
             
             currentBlockItems = []
@@ -311,10 +418,7 @@ final class ConvertToRawFIR: CompilerPhase, ASTVisitor {
         }
         
         let markLabel: (FIRLabelRepresentable) -> Void = { label in
-            guard case .nextIsLabel = expectation else {
-                fatalError("Expectation must be that the next thing is a label in order to parse a label")
-            }
-            currentLabel = label
+            currentLabel = label.copy()
             expectation = nil
         }
         
@@ -322,7 +426,7 @@ final class ConvertToRawFIR: CompilerPhase, ASTVisitor {
             _ terminator: FIRTerminator,
             _ thenBlock: [FIRVisitResult],
             _ elseBlock: [FIRVisitResult]?,
-            _ joinLabel: FIRLabelRepresentable
+            _ joinLabel: FIRLabelRepresentable?
         ) -> Void = { [self] terminator, thenBlock, elseBlock, joinLabel in
             finishCurrentBlock(terminator, nil)
             let thenBasicBlock = parseIntoBasicBlocks(thenBlock, .nextIsLabel)
@@ -331,32 +435,41 @@ final class ConvertToRawFIR: CompilerPhase, ASTVisitor {
                 let elseBasicBlock = parseIntoBasicBlocks(elseBlockRaw, .nextIsLabel)
                 blocks.append(contentsOf: elseBasicBlock)
             }
-            expectation = .nextIsLabel
-            markLabel(joinLabel)
+            if let joinLabel {
+                expectation = .nextIsLabel
+                markLabel(joinLabel)
+            }
         }
         
-        result.forEach { node in
+        for node in result {
             switch node {
             case .statement(let statement):
                 shouldDropTerminator = false
                 currentBlockItems.append(statement)
                 
             case .terminator(let terminator):
-                if shouldDropTerminator { return }
-                finishCurrentBlock(terminator, .nextIsLabel)
+                if shouldDropTerminator && currentLabel is FIRLabelHole {
+                    if let lastBlock = blocks.last {
+                        lastBlock.unreachableTerminators.append(terminator.copy())
+                    } else {
+                        continue
+                    }
+                } else {
+                    finishCurrentBlock(terminator.copy(), .nextIsLabel)
+                }
                 
             case .label(let label):
                 shouldDropTerminator = false
-                markLabel(label)
+                markLabel(label.copy())
                 
             case .ifStatement(let terminator, let thenBlock, let elseBlock, let joinLabel):
                 shouldDropTerminator = false
-                handleIf(terminator, thenBlock, elseBlock, joinLabel)
+                handleIf(terminator.copy(), thenBlock, elseBlock, joinLabel)
                 
             case .expression:
-                fatalError("Expressions cannot be in basic blocks")
+                InternalCompilerError.unreachable("Expressions cannot be in basic blocks")
             case .function:
-                fatalError("Functions cannot be nested")
+                InternalCompilerError.unreachable("Functions cannot be nested")
             }
         }
         
@@ -368,6 +481,6 @@ final class ConvertToRawFIR: CompilerPhase, ASTVisitor {
         label: FIRLabel,
         items: [FIRBasicBlockItem]
     ) -> FIRBasicBlock {
-        return .init(label: label, statements: items, terminator: terminator)
+        return .init(label: label.copy(), statements: items, terminator: terminator.copy())
     }
 }

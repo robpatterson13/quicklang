@@ -1,20 +1,21 @@
 //
-//  IR.swift
+//  FIR.swift
 //  quicklang
 //
 //  Created by Rob Patterson on 11/13/25.
 //
 
 final class FIRModule {
-    var nodes: [FIRNode]
+    var nodes: [FIRFunction]
     
-    init(nodes: [FIRNode]) {
+    init(nodes: [FIRFunction]) {
         self.nodes = nodes
     }
 }
 
 protocol FIRNode {
-    
+    func copy() -> Self
+    func acceptVisitor<V: FIRVisitor>(_ visitor: V, _ info: V.VisitorInfo) -> V.VisitorResult
 }
 
 protocol FIRTerminator: FIRNode {
@@ -47,7 +48,7 @@ enum FIRType {
     }
 }
 
-final class FIRFunction: FIRNode {
+final class FIRFunction {
     var blocks: [FIRBasicBlock]
     var parameters: [FIRParameter]?
     
@@ -67,52 +68,42 @@ final class FIRParameter {
     }
 }
 
-final class FIRBasicBlock: FIRNode {
+final class FIRBasicBlock {
     var label: FIRLabel
     var statements: [FIRBasicBlockItem] = []
     var terminator: FIRTerminator
+    var unreachableTerminators: [FIRTerminator] = []
+    var parameter: FIRParameter? = nil
     
-    init(label: FIRLabel, statements: [FIRBasicBlockItem], terminator: FIRTerminator) {
+    init(label: FIRLabel, statements: [FIRBasicBlockItem], terminator: FIRTerminator, parameter: FIRParameter? = nil) {
         self.label = label
         self.statements = statements
         self.terminator = terminator
+        self.parameter = parameter
     }
     
     func terminatorIsReturn() -> Bool {
-        guard terminator is FIRReturn else {
-            return false
-        }
-        
-        return true
+        terminator is FIRReturn
     }
     
-    class Builder {
-        var label: FIRLabel?
-        var statements: [FIRBasicBlockItem]?
-        var terminator: FIRTerminator?
-        
-        func build() -> FIRBasicBlock {
-            guard let label else { fatalError("Basic block must have a label") }
-            guard let terminator else { fatalError("Basic block must have a terminator") }
-            
-            return .init(
-                label: label,
-                statements: statements ?? [],
-                terminator: terminator
-            )
-        }
-        
-        func addStatement(_ statement: FIRBasicBlockItem) {
-            if statements == nil {
-                statements = []
-            }
-            
-            statements!.append(statement)
-        }
+    func addUnreachableTerminator(_ terminator: FIRTerminator) {
+        unreachableTerminators.append(terminator)
     }
 }
 
 protocol FIRExpression: FIRNode {
+    
+}
+
+final class FIREmptyTuple: FIRExpression {
+    
+    func acceptVisitor<V>(_ visitor: V, _ info: V.VisitorInfo) -> V.VisitorResult where V : FIRVisitor {
+        visitor.visitFIREmptyTuple(self, info)
+    }
+    
+    func copy() -> Self {
+        .init()
+    }
     
 }
 
@@ -122,6 +113,14 @@ final class FIRIdentifier: FIRExpression {
     init(name: String) {
         self.name = name
     }
+    
+    func acceptVisitor<V: FIRVisitor>(_ visitor: V, _ info: V.VisitorInfo) -> V.VisitorResult {
+        visitor.visitFIRIdentifier(self, info)
+    }
+    
+    func copy() -> Self {
+        .init(name: name)
+    }
 }
 
 final class FIRBoolean: FIRExpression {
@@ -130,6 +129,14 @@ final class FIRBoolean: FIRExpression {
     init(value: Bool) {
         self.value = value
     }
+    
+    func acceptVisitor<V: FIRVisitor>(_ visitor: V, _ info: V.VisitorInfo) -> V.VisitorResult {
+        visitor.visitFIRBoolean(self, info)
+    }
+    
+    func copy() -> Self {
+        .init(value: value)
+    }
 }
 
 final class FIRInteger: FIRExpression {
@@ -137,6 +144,14 @@ final class FIRInteger: FIRExpression {
     
     init(value: Int) {
         self.value = value
+    }
+    
+    func acceptVisitor<V: FIRVisitor>(_ visitor: V, _ info: V.VisitorInfo) -> V.VisitorResult {
+        visitor.visitFIRInteger(self, info)
+    }
+    
+    func copy() -> Self {
+        .init(value: value)
     }
 }
 
@@ -182,6 +197,14 @@ final class FIRUnaryExpression: FIRExpression {
         self.op = op
         self.expr = expr
     }
+    
+    func acceptVisitor<V: FIRVisitor>(_ visitor: V, _ info: V.VisitorInfo) -> V.VisitorResult {
+        visitor.visitFIRUnaryExpression(self, info)
+    }
+    
+    func copy() -> Self {
+        .init(op: op, expr: expr)
+    }
 }
 
 final class FIRBinaryExpression: FIRExpression {
@@ -194,6 +217,14 @@ final class FIRBinaryExpression: FIRExpression {
         self.lhs = lhs
         self.rhs = rhs
     }
+    
+    func acceptVisitor<V: FIRVisitor>(_ visitor: V, _ info: V.VisitorInfo) -> V.VisitorResult {
+        visitor.visitFIRBinaryExpression(self, info)
+    }
+    
+    func copy() -> Self {
+        .init(op: op, lhs: lhs, rhs: rhs)
+    }
 }
 
 final class FIRAssignment: FIRBasicBlockItem {
@@ -203,6 +234,14 @@ final class FIRAssignment: FIRBasicBlockItem {
     init(name: String, value: FIRExpression) {
         self.name = name
         self.value = value
+    }
+    
+    func acceptVisitor<V: FIRVisitor>(_ visitor: V, _ info: V.VisitorInfo) -> V.VisitorResult {
+        visitor.visitFIRAssignment(self, info)
+    }
+    
+    func copy() -> Self {
+        .init(name: name, value: value)
     }
 }
 
@@ -216,21 +255,54 @@ final class FIRConditionalBranch: FIRTerminator {
         self.thenBranch = thenBranch
         self.elseBranch = elseBranch
     }
+    
+    func copyFrom(_ branch: FIRConditionalBranch) {
+        self.condition = branch.condition
+        self.thenBranch = branch.thenBranch
+        self.elseBranch = branch.elseBranch
+    }
+    
+    func acceptVisitor<V: FIRVisitor>(_ visitor: V, _ info: V.VisitorInfo) -> V.VisitorResult {
+        visitor.visitFIRConditionalBranch(self, info)
+    }
+    
+    func copy() -> Self {
+        .init(condition: condition, thenBranch: thenBranch, elseBranch: elseBranch)
+    }
 }
 
 final class FIRBranch: FIRTerminator {
+    var label: FIRLabel
+    // argument
+    var value: FIRExpression?
+    
+    init(label: FIRLabel, value: FIRExpression? = nil) {
+        self.label = label
+        self.value = value
+    }
+    
+    func acceptVisitor<V: FIRVisitor>(_ visitor: V, _ info: V.VisitorInfo) -> V.VisitorResult {
+        visitor.visitFIRBranch(self, info)
+    }
+    
+    func copy() -> Self {
+        .init(label: label, value: value)
+    }
+}
+
+final class FIRJump: FIRTerminator {
     var label: FIRLabel
     
     init(label: FIRLabel) {
         self.label = label
     }
-}
-
-final class FIRJump: FIRTerminator {
-    var label: FIRLabelRepresentable
     
-    init(label: FIRLabel) {
-        self.label = label
+    func acceptVisitor<V: FIRVisitor>(_ visitor: V, _ info: V.VisitorInfo) -> V.VisitorResult {
+        visitor.visitFIRJump(self, info)
+    }
+    
+    func copy() -> Self {
+        .init(label: label)
     }
 }
 
@@ -251,10 +323,21 @@ final class FIRLabel: FIRLabelRepresentable {
     func copy() -> Self {
         .init(name: name)
     }
+    
+    func acceptVisitor<V: FIRVisitor>(_ visitor: V, _ info: V.VisitorInfo) -> V.VisitorResult {
+        visitor.visitFIRLabel(self, info)
+    }
 }
 
 final class FIRLabelHole: FIRLabelRepresentable {
     
+    func acceptVisitor<V>(_ visitor: V, _ info: V.VisitorInfo) -> V.VisitorResult where V : FIRVisitor {
+        fatalError("Cannot visit label hole")
+    }
+    
+    func copy() -> Self {
+        .init()
+    }
 }
 
 final class FIRReturn: FIRTerminator {
@@ -262,6 +345,14 @@ final class FIRReturn: FIRTerminator {
     
     init(value: FIRExpression) {
         self.value = value
+    }
+    
+    func acceptVisitor<V: FIRVisitor>(_ visitor: V, _ info: V.VisitorInfo) -> V.VisitorResult {
+        visitor.visitFIRReturn(self, info)
+    }
+    
+    func copy() -> Self {
+        .init(value: value)
     }
 }
 
@@ -272,5 +363,13 @@ final class FIRFunctionCall: FIRExpression, FIRBasicBlockItem {
     init(function: String, parameter: [FIRExpression]) {
         self.function = function
         self.parameter = parameter
+    }
+    
+    func acceptVisitor<V: FIRVisitor>(_ visitor: V, _ info: V.VisitorInfo) -> V.VisitorResult {
+        visitor.visitFIRFunctionCall(self, info)
+    }
+    
+    func copy() -> Self {
+        .init(function: function, parameter: parameter)
     }
 }

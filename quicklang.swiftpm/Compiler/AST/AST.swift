@@ -37,9 +37,11 @@ final class TopLevel {
     }
 }
 
-protocol BlockLevelNode: ASTNode { }
+protocol BlockLevelNode: ASTNode {
+    func needsContinuationPoint() -> Bool
+}
 
-protocol TopLevelNode: BlockLevelNode { }
+protocol TopLevelNode: ASTNode { }
 
 protocol ExpressionNode: ASTNode { }
 
@@ -62,6 +64,10 @@ final class DefinitionNode: BlockLevelNode {
     func acceptVisitor<V: ASTVisitor>(_ visitor: V, _ info: V.VisitorInfo) -> V.VisitorResult {
         visitor.visitDefinition(self, info)
     }
+    
+    func needsContinuationPoint() -> Bool {
+        false
+    }
 }
 
 protocol StatementNode: BlockLevelNode { }
@@ -78,6 +84,10 @@ final class IdentifierExpression: ExpressionNode, BlockLevelNode {
     
     func acceptVisitor<V: ASTVisitor>(_ visitor: V, _ info: V.VisitorInfo) -> V.VisitorResult {
         visitor.visitIdentifierExpression(self, info)
+    }
+    
+    func needsContinuationPoint() -> Bool {
+        false
     }
 }
 
@@ -207,24 +217,43 @@ final class FuncApplication: ExpressionNode, BlockLevelNode {
     func acceptVisitor<V: ASTVisitor>(_ visitor: V, _ info: V.VisitorInfo) -> V.VisitorResult {
         visitor.visitFuncApplication(self, info)
     }
+    
+    func needsContinuationPoint() -> Bool {
+        false
+    }
 }
 
 final class IfStatement: StatementNode, BlockLevelNode {
     let id: UUID
-    let condition: any ExpressionNode
-    let thenBranch: [any BlockLevelNode]
-    let elseBranch: [any BlockLevelNode]?
+    var condition: any ExpressionNode
+    var thenBranch: [any BlockLevelNode]
+    var elseBranch: [any BlockLevelNode]?
     var scope: ASTScope?
     
-    init(id: UUID = UUID(), condition: any ExpressionNode, thenBranch: [any BlockLevelNode], elseBranch: [any BlockLevelNode]?) {
+    var desugaredFrom: String? = nil
+    func isResultOfDesugaring() -> Bool {
+        desugaredFrom != nil
+    }
+    
+    init(id: UUID = UUID(), condition: any ExpressionNode, thenBranch: [any BlockLevelNode], elseBranch: [any BlockLevelNode]?, desugaredFrom: String? = nil) {
         self.id = id
         self.condition = condition
         self.thenBranch = thenBranch
         self.elseBranch = elseBranch
+        self.desugaredFrom = desugaredFrom
+    }
+    
+    // keeps the id and desugaredFrom fields unchanged if we were to create new nodes
+    func initFromOld(condition: any ExpressionNode, thenBranch: [any BlockLevelNode], elseBranch: [any BlockLevelNode]?) -> Self {
+        .init(id: id, condition: condition, thenBranch: thenBranch, elseBranch: elseBranch, desugaredFrom: desugaredFrom)
     }
     
     func acceptVisitor<V: ASTVisitor>(_ visitor: V, _ info: V.VisitorInfo) -> V.VisitorResult {
         visitor.visitIfStatement(self, info)
+    }
+    
+    func needsContinuationPoint() -> Bool {
+        true
     }
 }
 
@@ -236,6 +265,10 @@ final class ReturnStatement: StatementNode, BlockLevelNode {
     init(id: UUID = UUID(), expression: any ExpressionNode) {
         self.id = id
         self.expression = expression
+    }
+    
+    func needsContinuationPoint() -> Bool {
+        false
     }
     
     func acceptVisitor<V: ASTVisitor>(_ visitor: V, _ info: V.VisitorInfo) -> V.VisitorResult {
@@ -253,6 +286,10 @@ final class AssignmentStatement: StatementNode, BlockLevelNode {
         self.id = id
         self.name = name
         self.expression = expression
+    }
+    
+    func needsContinuationPoint() -> Bool {
+        false
     }
     
     func acceptVisitor<V: ASTVisitor>(_ visitor: V, _ info: V.VisitorInfo) -> V.VisitorResult {
