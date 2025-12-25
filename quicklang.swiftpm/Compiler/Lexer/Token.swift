@@ -68,6 +68,28 @@ enum Token {
         }
     }
     
+    func isUnaryOp() -> Bool {
+        switch self {
+        case .NOT: // add minus
+            return true
+        default:
+            return false
+        }
+    }
+    
+    func isBinaryOp() -> Bool {
+        switch self {
+        case .PLUS,
+                .MINUS,
+                .STAR,
+                .AND,
+                .OR:
+            return true
+        default:
+            return false
+        }
+    }
+    
     private static func isSymbolOp(_ symbol: String) -> Bool {
         switch symbol {
         case Token.PLUS.value,

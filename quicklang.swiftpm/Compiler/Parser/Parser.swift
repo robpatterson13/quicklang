@@ -343,7 +343,7 @@ final class Parser: CompilerPhase {
             return RawAssignmentStatement.incomplete
         }
         
-        let expressionNode = parseExpression(until: ";", min: 0)
+        let expressionNode = parseExpression(min: 0)
         
         let recoverFromSemicolonMissing = consume(.SEMICOLON, else: .expectedSemicolonToEndStatement(of: .definition))
         if let recoverFromSemicolonMissing {
@@ -456,7 +456,7 @@ final class Parser: CompilerPhase {
     }
     
     private func parseConditionalBlock() -> RawConditionalBlock {
-        let condition = parseExpression(until: "{", min: 0)
+        let condition = parseExpression(min: 0)
         guard !condition.isIncomplete else {
             return .incomplete
         }
@@ -526,7 +526,7 @@ final class Parser: CompilerPhase {
             return .incomplete
         }
         
-        let node = RawReturnStatement(expression: parseExpression(until: ";", min: 0))
+        let node = RawReturnStatement(expression: parseExpression(min: 0))
         
         let recoverFromSemicolonMissing = consume(.SEMICOLON, else: .expectedSemicolonToEndStatement(of: .return))
         if let recoverFromSemicolonMissing {
@@ -641,7 +641,7 @@ final class Parser: CompilerPhase {
             return RawLetDefinition.incomplete
         }
         
-        let boundExpression = parseExpression(until: ";", min: 0)
+        let boundExpression = parseExpression(min: 0)
         
         let recoverFromSemicolonMissing = consume(.SEMICOLON, else: .expectedSemicolonToEndStatement(of: .definition))
         if let recoverFromSemicolonMissing {
@@ -656,92 +656,86 @@ final class Parser: CompilerPhase {
         }
     }
     
-    private func parseExpressionBeginning() -> any RawExpressionNode {
-        
-        let currentToken: Token
-        let result = expect(else: .expectedExpression)
-        switch result {
-        case .success(let token):
-            currentToken = token
-        case .failure(let strategy):
-            recover(using: strategy)
-            return RawNumberExpression.incomplete
-        }
-        
-        switch currentToken {
-        case let .Identifier(id, _):
-            if let maybeParen = tokens.peek(ahead: 2), maybeParen == .LPAREN {
-                return parseFunctionApplication()
-            } else {
-                tokens.burn()
-                return RawIdentifierExpression(name: id)
-            }
-            
-        case let .Number(n, _):
-            tokens.burn()
-            return RawNumberExpression(value: Int(n)!)
-            
-        case let .Boolean(b, _):
-            tokens.burn()
-            return RawBooleanExpression(value: Bool(b)!)
-            
-        default:
-            let strategy = self.error(.expectedExpression)
-            recover(using: strategy)
-            return RawNumberExpression.incomplete
-        }
+    typealias OperatorInfo = (precedence: Int, associativity: OperatorAssociativity)
+    enum OperatorAssociativity {
+        case left
+        case right
     }
+    let operatorInfoMap: [Token: OperatorInfo] = [
+        .NOT:   (5, .right),
+        .STAR:  (4, .left),
+        .PLUS:  (3, .left),
+        .MINUS: (3, .left),
+        .AND:   (2, .left),
+        .OR:    (1, .left)
+    ]
     
-    private func parseExpression(until end: String, min: Int) -> any RawExpressionNode {
-        
-        var lhsNode = parseExpressionBeginning()
-        if lhsNode.isIncomplete {
-            return lhsNode
-        }
-        
-        while true {
-            if let maybeEnd = tokens.peekNext(), maybeEnd.value == end {
-                break
-            }
+    private func parseAtom() -> any RawExpressionNode {
+        let currentTokenPeeked = tokens.peekNext()
+        if let currentTokenPeeked, currentTokenPeeked == .LPAREN {
+            tokens.burn()
+            let value = parseExpression(min: 1)
             
-            guard let op = tokens.peekNext(), op.isOp() else {
-                let strategy = self.error(.expectedOperator)
-                recover(using: strategy)
+            let recoverFromRParenMissing = consume(.RPAREN, else: .expectedRightParen(where: .functionApplication))
+            if let recoverFromRParenMissing {
+                recover(using: recoverFromRParenMissing)
                 return RawNumberExpression.incomplete
             }
             
-            let (lBp, rBp) = op.bindingPower
+            return value
             
-            guard lBp >= min else {
+        } else if let currentTokenPeeked, currentTokenPeeked.isUnaryOp() {
+            tokens.burn()
+            let value = parseExpression(min: operatorInfoMap[currentTokenPeeked]!.precedence)
+            
+            return RawUnaryOperation(op: .from(token: currentTokenPeeked)!, expression: value)
+            
+        } else {
+            switch tokens.next() {
+            case let .Identifier(id, _):
+                if let maybeParen = tokens.peek(ahead: 2), maybeParen == .LPAREN {
+                    return parseFunctionApplication()
+                } else {
+                    return RawIdentifierExpression(name: id)
+                }
+                
+            case let .Number(n, _):
+                return RawNumberExpression(value: Int(n)!)
+                
+            case let .Boolean(b, _):
+                return RawBooleanExpression(value: Bool(b)!)
+                
+            default:
+                let strategy = self.error(.expectedExpression)
+                recover(using: strategy)
+                return RawNumberExpression.incomplete
+            }
+        }
+    }
+    
+    private func parseExpression(min: Int) -> any RawExpressionNode {
+        var atomLhs: any RawExpressionNode = parseAtom()
+        
+        while true {
+            let currentTokenPeeked = tokens.peekNext()
+            
+            guard let currentTokenPeeked, currentTokenPeeked.isBinaryOp(),
+                  let (precedence, associativity) = operatorInfoMap[currentTokenPeeked],
+                  precedence >= min else {
                 break
             }
             
-            tokens.burn()
-            let rhsNode = parseExpression(until: end, min: rBp)
-            if rhsNode.isIncomplete {
-                return rhsNode
-            }
-            
-            var opVal: BinaryOperator
-            switch op {
-            case .PLUS:
-                opVal = BinaryOperator.plus
-            case .MINUS:
-                opVal = BinaryOperator.minus
-            case .STAR:
-                opVal = BinaryOperator.times
-            case .AND:
-                opVal = BinaryOperator.and
-            case .OR:
-                opVal = BinaryOperator.or
-            default:
-                fatalError() // TODO: unreachable with current grammar
-            }
-            
-            lhsNode = RawBinaryOperation(op: opVal, lhs: lhsNode, rhs: rhsNode)
+            let nextMinPrecedence = associativity == .left ? precedence + 1 : precedence
+            let currentToken = tokens.next()!
+            let atomRhs = parseExpression(min: nextMinPrecedence)
+            atomLhs = RawBinaryOperation(
+                op: .from(token: currentToken)!,
+                lhs: atomLhs,
+                rhs: atomRhs
+            )
         }
         
-        return lhsNode
+        return atomLhs
     }
     
     private typealias IdentifierUsage = ExpectedIdentifierErrorInfo.ErrorType
@@ -825,7 +819,7 @@ final class Parser: CompilerPhase {
         
         switch nextToken {
         case .Boolean, .Identifier, .Number:
-            return parseExpression(until: ")", min: 0)
+            return parseExpression(min: 0)
         case .Keyword(let kw, _):
             let strategy = self.error(.expectedFunctionArgument(got: .keyword(kw)))
             recover(using: strategy)

@@ -52,6 +52,15 @@ enum UnaryOperator {
     var isBoolean: Bool {
         return self == .not
     }
+    
+    static func from(token: Token) -> UnaryOperator? {
+        switch token {
+        case .NOT: return .not
+        case .MINUS: return .neg
+        default:
+            return nil
+        }
+    }
 }
 
 enum BinaryOperator {
@@ -68,6 +77,18 @@ enum BinaryOperator {
             return true
         default:
             return false
+        }
+    }
+    
+    static func from(token: Token) -> BinaryOperator? {
+        switch token {
+        case .AND: return .and
+        case .OR: return .or
+        case .PLUS: return .plus
+        case .MINUS: return .minus
+        case .STAR: return .times
+        default:
+            return nil
         }
     }
 }

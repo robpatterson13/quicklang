@@ -79,7 +79,13 @@ enum FIRVisitResult {
         terminator: any FIRTerminator,
         thenBlock: [FIRVisitResult],
         elseBlock: [FIRVisitResult]?,
-        joinLabel: FIRLabel? // optional because desugared if statements are already taken care of
+        
+        // optional because desugared if statements are already taken care of,
+        // i.e. this join label has already been added at the top-most level;
+        // keeping it in a desugared if statement visit result would mean that
+        // we would add a new block with the join label for each non-else
+        // (if/else if) branch in the sugared conditional
+        joinLabel: FIRLabel?
     )
     
     func unwrapExpression() -> any FIRExpression {
