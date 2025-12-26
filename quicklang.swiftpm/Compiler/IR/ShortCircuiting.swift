@@ -5,45 +5,56 @@
 //  Created by Rob Patterson on 12/20/25.
 //
 
+struct ShortCircuitInfo {
+    let thn: String
+    let els: String
+    
+    var kind: Kind = .subexpression
+    enum Kind {
+        case subexpression
+        case branch
+    }
+    
+    func asSubexpression() -> Self {
+        .init(thn: thn, els: els, kind: .subexpression)
+    }
+    
+    func asBranch() -> Self {
+        .init(thn: thn, els: els, kind: .branch)
+    }
+    
+    func unwrapBranches() -> (thn: String, els: String) {
+        return (thn: thn, els: els)
+    }
+}
+
+enum ShortCircuitResult {
+    case subexpression(any FIRExpression, [FIRAssignment])
+    case branch(FIRConditionalBranch, [FIRBasicBlock])
+    
+    func unwrapSubexpression() -> (any FIRExpression, [FIRAssignment]) {
+        switch self {
+        case .subexpression(let expression, let bindings):
+            return (expression, bindings)
+        @unknown default:
+            InternalCompilerError.unreachable("Can't unwrap non-expression as expression")
+        }
+    }
+    
+    func unwrapBranch() -> (FIRConditionalBranch, [FIRBasicBlock]) {
+        switch self {
+        case .branch(let branch, let blocks):
+            return (branch, blocks)
+        @unknown default:
+            InternalCompilerError.unreachable("Can't unwrap non-expression as expression")
+        }
+    }
+}
+
 final class ShortCircuitingForIfStatementCondition: FIRVisitor {
     
-    struct ShortCircuitContext {
-        var parentBlockName: String?
-        var thenLabel: String
-        var elseLabel: String
-        var isNegated: Bool = false
-        
-        func extendParentBlockName(_ parentBlockName: String) -> Self {
-            let name = if let existingName = self.parentBlockName {
-                existingName + "$\(parentBlockName)"
-            } else {
-                parentBlockName
-            }
-            
-            return .init(parentBlockName: name, thenLabel: self.thenLabel, elseLabel: self.elseLabel, isNegated: isNegated)
-        }
-        
-        func changeLabels(thenLabel: String? = nil, elseLabel: String? = nil) -> Self {
-            .init(thenLabel: thenLabel ?? self.thenLabel, elseLabel: elseLabel ?? self.elseLabel, isNegated: isNegated)
-        }
-        
-        func getLabels() -> (thenLabel: String, elseLabel: String) {
-            (thenLabel: thenLabel, elseLabel: elseLabel)
-        }
-        
-        func negate() -> Self {
-            .init(thenLabel: thenLabel, elseLabel: elseLabel, isNegated: !isNegated)
-        }
-    }
-    
-    struct ShortCircuitResult {
-        var terminator: FIRTerminator? = nil
-        let branchToConnectTo: String
-        let prologue: [FIRBasicBlock]
-    }
-    
+    typealias VisitorInfo = ShortCircuitInfo
     typealias VisitorResult = ShortCircuitResult
-    typealias VisitorInfo = ShortCircuitContext
     
     func begin(_ module: FIRModule) {
         for function in module.nodes {
@@ -52,135 +63,137 @@ final class ShortCircuitingForIfStatementCondition: FIRVisitor {
     }
     
     private func processFunction(_ function: FIRFunction) {
-        var prologue: [FIRBasicBlock] = []
+        var newBlocks: [FIRBasicBlock] = []
         for block in function.blocks {
-            guard let branch = block.terminator as? FIRConditionalBranch else {
-                return
+            if let branch = block.terminator as? FIRConditionalBranch {
+                let (branch, blocks) = branch.acceptVisitor(self, .init(thn: "", els: "")).unwrapBranch()
+                block.terminator = branch
+                newBlocks.append(contentsOf: blocks)
             }
-            
-            let labels: ShortCircuitContext = .init(
-                thenLabel: branch.elseBranch,
-                elseLabel: branch.thenBranch
-            )
-            let result = branch.acceptVisitor(self, labels)
-            prologue.append(contentsOf: result.prologue)
-            guard let terminator = result.terminator else {
-                InternalCompilerError.unreachable("Must have a terminator at this point")
-            }
-            block.terminator = terminator
         }
-        function.blocks.append(contentsOf: prologue)
+        
+        function.blocks.append(contentsOf: newBlocks)
     }
     
     func visitFIRConditionalBranch(
         _ definition: FIRConditionalBranch,
-        _ info: ShortCircuitContext
-    ) -> VisitorResult {
-        let context: ShortCircuitContext = .init(
-            parentBlockName: GenSymInfo.singleton.genSym(root: "cond_br", id: nil),
-            thenLabel: definition.thenBranch,
-            elseLabel: definition.elseBranch
-        )
-        let processedCond = definition.condition.acceptVisitor(self, context)
+        _ info: ShortCircuitInfo)
+    -> ShortCircuitResult {
         
-        let branch = FIRBranch(label: processedCond.branchToConnectTo)
+        let info = ShortCircuitInfo(thn: definition.thenBranch, els: definition.elseBranch)
         
-        return .init(terminator: branch, branchToConnectTo: "n/a", prologue: processedCond.prologue)
-    }
-    
-    func visitFIRUnaryExpression(
-        _ operation: FIRUnaryExpression,
-        _ info: ShortCircuitContext
-    ) -> VisitorResult {
-        switch operation.op {
-        case .not:
-            return operation.expr.acceptVisitor(self, info.negate())
-        case .neg:
-            InternalCompilerError.unreachable("Not possible at this point")
-        default:
-            InternalCompilerError.unreachable("Not possible to have a non-boolean expression")
-        }
-    }
-    
-    func visitFIRBinaryExpression(
-        _ operation: FIRBinaryExpression,
-        _ info: ShortCircuitContext
-    ) -> VisitorResult {
-        let (thenBranch, elseBranch) = info.getLabels()
-        
-        switch operation.op {
-        case .and, .or:
-            var prologue = [FIRBasicBlock]()
-            let rhsThenLabel = info.isNegated ? elseBranch : thenBranch
-            let rhsElseLabel = info.isNegated ? thenBranch : elseBranch
-            
-            let rhsInfo = info.changeLabels(thenLabel: rhsThenLabel, elseLabel: rhsElseLabel)
-            let rhsResult = operation.rhs.acceptVisitor(self, rhsInfo.extendParentBlockName("rhs"))
-            
-            let lhsThenLabel = operation.op == .and ? rhsResult.branchToConnectTo : rhsThenLabel
-            let lhsElseLabel = operation.op == .and ? rhsElseLabel : rhsResult.branchToConnectTo
-            let lhsInfo = info.changeLabels(thenLabel: lhsThenLabel, elseLabel: lhsElseLabel)
-            let lhsResult = operation.lhs.acceptVisitor(self, lhsInfo.extendParentBlockName("lhs"))
-            
-            prologue.append(contentsOf: lhsResult.prologue + rhsResult.prologue)
-            
-            return .init(
-                branchToConnectTo: lhsResult.branchToConnectTo,
-                prologue: prologue
-            )
-        default:
-            InternalCompilerError.unreachable("Not possible; all non-boolean operations should be lifted out of the if statement condition")
-        }
-    }
-    
-    private func giveBackExpressionWithNegationConsidered(
-        _ expression: any FIRExpression,
-        _ info: ShortCircuitContext,
-        root: String
-    ) -> ShortCircuitResult {
-        let (thenLabel, elseLabel) = info.getLabels()
-        let thenBranch = FIRLabel(name: info.isNegated ? elseLabel : thenLabel)
-        let elseBranch = FIRLabel(name: info.isNegated ? thenLabel : elseLabel)
-        var expression = expression
-        if info.isNegated {
-            expression = FIRUnaryExpression(op: .not, expr: expression)
-        }
-        
-        let newTerminator = FIRConditionalBranch(
-            condition: expression,
-            thenBranch: thenBranch.name,
-            elseBranch: elseBranch.name
-        )
-        let gensym = GenSymInfo.singleton.genSym(root: root, id: nil)
-        let newBlockName = info.extendParentBlockName(gensym).parentBlockName!
-        let newBlock = FIRBasicBlock(
-            label: FIRLabel(name: newBlockName),
-            statements: [],
-            terminator: newTerminator
-        )
-        
-        return .init(branchToConnectTo: newBlockName, prologue: [newBlock])
+        let result = definition.condition.acceptVisitor(self, info)
+        return result
     }
     
     func visitFIRIdentifier(
         _ expression: FIRIdentifier,
-        _ info: ShortCircuitContext
-    ) -> VisitorResult {
-        giveBackExpressionWithNegationConsidered(expression, info, root: expression.name)
+        _ info: ShortCircuitInfo
+    ) -> ShortCircuitResult {
+        
+        let (thnLabel, elsLabel) = info.unwrapBranches()
+        let branch = FIRConditionalBranch(
+            condition: expression,
+            thenBranch: thnLabel,
+            elseBranch: elsLabel
+        )
+        
+        return .branch(branch, [])
     }
     
     func visitFIRBoolean(
         _ expression: FIRBoolean,
-        _ info: ShortCircuitContext
-    ) -> VisitorResult {
-        giveBackExpressionWithNegationConsidered(expression, info, root: "boolean")
+        _ info: ShortCircuitInfo
+    ) -> ShortCircuitResult {
+        
+        let (thnLabel, elsLabel) = info.unwrapBranches()
+        let branch = FIRConditionalBranch(
+            condition: expression,
+            thenBranch: thnLabel,
+            elseBranch: elsLabel
+        )
+        
+        return .branch(branch, [])
+    }
+    
+    func visitFIRUnaryExpression(
+        _ operation: FIRUnaryExpression,
+        _ info: ShortCircuitInfo
+    ) -> ShortCircuitResult {
+        
+        if operation.op == .not {
+            let result = operation.expr.acceptVisitor(self, info)
+            let (branch, newBlocks) = result.unwrapBranch()
+            
+            let newBranch = FIRConditionalBranch(
+                condition: branch.condition,
+                thenBranch: branch.elseBranch,
+                elseBranch: branch.thenBranch
+            )
+            
+            return .branch(newBranch, newBlocks)
+        }
+        
+        let (newSubexpr, newPrologue) = operation.expr.acceptVisitor(self, info).unwrapSubexpression()
+        let newBoundExpr = FIRUnaryExpression(op: operation.op, expr: newSubexpr)
+        let newBinding = GenSymInfo.singleton.genSym(root: "un_op_subexpr", id: nil)
+        let newAssignment = FIRAssignment(name: newBinding, value: newBoundExpr)
+        let newIdentifier = FIRIdentifier(name: newBinding)
+        return .subexpression(newIdentifier, newPrologue + [newAssignment])
+    }
+    
+    func visitFIRBinaryExpression(
+        _ operation: FIRBinaryExpression,
+        _ info: ShortCircuitInfo
+    ) -> ShortCircuitResult {
+        let (thnBranch, elsBranch) = info.unwrapBranches()
+        
+        if operation.op.isBoolean() {
+            
+            let (rhsBranch, rhsBlocks) = operation.rhs.acceptVisitor(self, info).unwrapBranch()
+            
+            let midName = GenSymInfo.singleton.genSym(root: "short_circuit_mid", id: nil)
+            let thenLabel = operation.op == .and ? midName : thnBranch
+            let elseLabel = operation.op == .and ? elsBranch : midName
+            
+            let lhsInfo = ShortCircuitInfo(thn: thenLabel, els: elseLabel)
+            let (lhsBranch, lhsBlocks) = operation.lhs.acceptVisitor(self, lhsInfo).unwrapBranch()
+            
+            let midLabel = FIRLabel(name: midName)
+            let midBlock = FIRBasicBlock(
+                label: midLabel,
+                statements: [],
+                terminator: rhsBranch
+            )
+            
+            let newBlocks: [FIRBasicBlock] = lhsBlocks + [midBlock] + rhsBlocks
+            return .branch(lhsBranch, newBlocks)
+            
+        } else {
+            
+            let condBranch = FIRConditionalBranch(
+                condition: operation,
+                thenBranch: info.thn,
+                elseBranch: info.els
+            )
+            
+            return .branch(condBranch, [])
+        }
     }
     
     func visitFIRFunctionCall(
         _ statement: FIRFunctionCall,
-        _ info: ShortCircuitContext
-    ) -> VisitorResult {
-        giveBackExpressionWithNegationConsidered(statement, info, root: "call$\(statement.function)")
+        _ info: ShortCircuitInfo
+    ) -> ShortCircuitResult {
+        
+        let (thnLabel, elsLabel) = info.unwrapBranches()
+        let branch = FIRConditionalBranch(
+            condition: statement,
+            thenBranch: thnLabel,
+            elseBranch: elsLabel
+        )
+        
+        return .branch(branch, [])
     }
     
 }
@@ -188,9 +201,19 @@ final class ShortCircuitingForIfStatementCondition: FIRVisitor {
 // unreachables
 extension ShortCircuitingForIfStatementCondition {
     
+    func visitFIRInteger(
+        _ expression: FIRInteger,
+        _ info: ShortCircuitInfo
+    ) -> ShortCircuitResult {
+        
+        InternalCompilerError.unreachable(
+            "FIR integers cannot appear in a short-circuiting operation"
+        )
+    }
+    
     func visitFIRAssignment(
         _ definition: FIRAssignment,
-        _ info: ShortCircuitContext
+        _ info: ShortCircuitInfo
     ) -> VisitorResult {
         
         InternalCompilerError.unreachable(
@@ -200,7 +223,7 @@ extension ShortCircuitingForIfStatementCondition {
     
     func visitFIRBranch(
         _ expression: FIRBranch,
-        _ info: ShortCircuitContext
+        _ info: ShortCircuitInfo
     ) -> VisitorResult {
         
         InternalCompilerError.unreachable(
@@ -208,19 +231,9 @@ extension ShortCircuitingForIfStatementCondition {
         )
     }
     
-    func visitFIRInteger(
-        _ expression: FIRInteger,
-        _ info: ShortCircuitContext
-    ) -> VisitorResult {
-        
-        InternalCompilerError.unreachable(
-            "FIR integers cannot appear in a short-circuiting operation"
-        )
-    }
-    
     func visitFIRJump(
         _ statement: FIRJump,
-        _ info: ShortCircuitContext
+        _ info: ShortCircuitInfo
     ) -> VisitorResult {
         
         InternalCompilerError.unreachable(
@@ -230,7 +243,7 @@ extension ShortCircuitingForIfStatementCondition {
     
     func visitFIRLabel(
         _ statement: FIRLabel,
-        _ info: ShortCircuitContext
+        _ info: ShortCircuitInfo
     ) -> VisitorResult {
         
         InternalCompilerError.unreachable(
@@ -240,7 +253,7 @@ extension ShortCircuitingForIfStatementCondition {
     
     func visitFIRReturn(
         _ statement: FIRReturn,
-        _ info: ShortCircuitContext
+        _ info: ShortCircuitInfo
     ) -> VisitorResult {
         
         InternalCompilerError.unreachable(
@@ -250,7 +263,7 @@ extension ShortCircuitingForIfStatementCondition {
     
     func visitFIREmptyTuple(
         _ empty: FIREmptyTuple,
-        _ info: ShortCircuitContext
+        _ info: ShortCircuitInfo
     ) -> ShortCircuitResult {
         
         InternalCompilerError.unreachable(

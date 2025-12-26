@@ -78,7 +78,7 @@ final class GenerateFIR: CompilerPhase, ASTVisitor {
     var context: ASTContext?
     var errorManager: CompilerErrorManager?
     
-//    let shortCircuitingForIfStatementCondition = ShortCircuitingForIfStatementCondition()
+    let shortCircuitingForIfStatementCondition = ShortCircuitingForIfStatementCondition()
     
     init(errorManager: CompilerErrorManager, settings: DriverSettings) {
         self.errorManager = errorManager
@@ -100,7 +100,7 @@ final class GenerateFIR: CompilerPhase, ASTVisitor {
         }
         
         let module = FIRModule(nodes: nodes)
-//        shortCircuitingForIfStatementCondition.begin(module)
+        shortCircuitingForIfStatementCondition.begin(module)
         return .success(result: module)
     }
     
@@ -137,7 +137,11 @@ final class GenerateFIR: CompilerPhase, ASTVisitor {
         let newExpression = FIRInteger(value: expression.value)
         
         let result = (expression: newExpression, bindings: [] as [FIRAssignment])
-        return .expressionVisit(result)
+        if info.shouldLetBind {
+            return .expressionVisit(result)
+        } else {
+            return .notSafeToLetBind(result)
+        }
     }
     
     func visitUnaryOperation(
@@ -210,7 +214,7 @@ final class GenerateFIR: CompilerPhase, ASTVisitor {
             var canLetBindBinaryExpression: Bool = true
             var bindings = [] as [FIRAssignment]
             
-            let lhsResult = operation.lhs.acceptVisitor(self, info)
+            let lhsResult = operation.lhs.acceptVisitor(self, info.notOkayToLetBind())
             let lhsExpression: FIRExpression
             switch lhsResult {
             case .expressionVisit((let expression, let newBindings)):
@@ -226,7 +230,7 @@ final class GenerateFIR: CompilerPhase, ASTVisitor {
                 InternalCompilerError.unreachable("Not possible")
             }
             
-            let rhsResult = operation.rhs.acceptVisitor(self, info)
+            let rhsResult = operation.rhs.acceptVisitor(self, info.notOkayToLetBind())
             let rhsExpression: FIRExpression
             switch rhsResult {
             case .expressionVisit((let expression, let newBindings)):

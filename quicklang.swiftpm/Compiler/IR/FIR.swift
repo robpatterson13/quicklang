@@ -272,6 +272,15 @@ enum FIROperation {
             return .lte
         }
     }
+    
+    func isBoolean() -> Bool {
+        switch self {
+        case .and, .or, .not:
+            return true
+        default:
+            return false
+        }
+    }
 }
 
 final class FIRUnaryExpression: FIRExpression {
