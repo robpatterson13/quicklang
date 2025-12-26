@@ -22,12 +22,12 @@ final class Sema: CompilerPhase {
         case bindingCheck = 1
         case buildSymbolTable = 2
         case typecheck = 3
-        case linearize = 4
+        case jumpInsertion = 4
         
         fileprivate func makePassManager(using context: ASTContext) -> any SemaPass {
             switch self {
-            case .linearize:
-                return ASTLinearize(context: context)
+            case .jumpInsertion:
+                return ExplicitJumpInsertion(context: context)
             case .bindingCheck:
                 return BindingCheck(context: context)
             case .typecheck:

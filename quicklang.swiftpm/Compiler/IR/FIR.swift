@@ -75,7 +75,7 @@ final class FIRBasicBlock {
     var unreachableTerminators: [FIRTerminator] = []
     var parameter: FIRParameter? = nil
     
-    init(label: FIRLabel, statements: [FIRBasicBlockItem], terminator: FIRTerminator, parameter: FIRParameter? = nil) {
+    init(label: FIRLabel, statements: [FIRBasicBlockItem], terminator: FIRTerminator, unreachableTerminators: [FIRTerminator] = [], parameter: FIRParameter? = nil) {
         self.label = label
         self.statements = statements
         self.terminator = terminator
@@ -88,6 +88,79 @@ final class FIRBasicBlock {
     
     func addUnreachableTerminator(_ terminator: FIRTerminator) {
         unreachableTerminators.append(terminator)
+    }
+    
+    class Builder {
+        var label: FIRLabel? = nil
+        var statements: [FIRBasicBlockItem]? = nil
+        var terminator: FIRTerminator? = nil
+        var unreachableTerminators: [FIRTerminator]? = nil
+        var parameter: FIRParameter? = nil
+        
+        func build() -> FIRBasicBlock {
+            guard let label else { fatalError("Basic block must have a label") }
+            guard let terminator else { fatalError("Basic block must have a terminator") }
+            
+            return FIRBasicBlock(
+                label: label,
+                statements: statements ?? [],
+                terminator: terminator,
+                unreachableTerminators: unreachableTerminators ?? [],
+                parameter: parameter
+            )
+        }
+        
+        func isNew() -> Bool {
+            return label == nil && statements == nil && terminator == nil && unreachableTerminators == nil && parameter == nil
+        }
+        
+        func addLabel(_ label: FIRLabel) {
+            self.label = label
+        }
+        
+        func onlyTerminators() -> [FIRTerminator]? {
+            if label != nil || statements != nil || parameter != nil {
+                return nil
+            }
+            
+            guard let terminator else {
+                return nil
+            }
+            
+            var unreachableTerminators = unreachableTerminators ?? []
+            unreachableTerminators.append(terminator)
+            return unreachableTerminators
+        }
+        
+        func addStatement(_ statement: FIRBasicBlockItem) {
+            if statements != nil {
+                self.statements!.append(statement)
+            } else {
+                self.statements = [statement]
+            }
+        }
+        
+        func addStatements(_ statements: [FIRBasicBlockItem]) {
+            for statement in statements {
+                addStatement(statement)
+            }
+        }
+        
+        func addTerminator(_ terminator: FIRTerminator) {
+            if self.terminator != nil {
+                if unreachableTerminators != nil {
+                    unreachableTerminators!.append(terminator)
+                } else {
+                    unreachableTerminators = [terminator]
+                }
+            } else {
+                self.terminator = terminator
+            }
+        }
+        
+        func addParameter(_ parameter: FIRParameter) {
+            self.parameter = parameter
+        }
     }
 }
 
@@ -164,7 +237,7 @@ enum FIROperation {
     case minus
     case times
     
-    static func convert(from op: UnaryOperator) -> FIROperation {
+    static func from(op: UnaryOperator) -> FIROperation {
         switch op {
         case .not:
             return .not
@@ -173,7 +246,7 @@ enum FIROperation {
         }
     }
     
-    static func convert(from op: BinaryOperator) -> FIROperation {
+    static func from(op: BinaryOperator) -> FIROperation {
         switch op {
         case .plus:
             return .plus
@@ -247,10 +320,10 @@ final class FIRAssignment: FIRBasicBlockItem {
 
 final class FIRConditionalBranch: FIRTerminator {
     var condition: FIRExpression
-    var thenBranch: FIRLabel
-    var elseBranch: FIRLabel
+    var thenBranch: String
+    var elseBranch: String
     
-    init(condition: FIRExpression, thenBranch: FIRLabel, elseBranch: FIRLabel) {
+    init(condition: FIRExpression, thenBranch: String, elseBranch: String) {
         self.condition = condition
         self.thenBranch = thenBranch
         self.elseBranch = elseBranch
@@ -272,11 +345,11 @@ final class FIRConditionalBranch: FIRTerminator {
 }
 
 final class FIRBranch: FIRTerminator {
-    var label: FIRLabel
+    var label: String
     // argument
     var value: FIRExpression?
     
-    init(label: FIRLabel, value: FIRExpression? = nil) {
+    init(label: String, value: FIRExpression? = nil) {
         self.label = label
         self.value = value
     }
@@ -291,9 +364,9 @@ final class FIRBranch: FIRTerminator {
 }
 
 final class FIRJump: FIRTerminator {
-    var label: FIRLabel
+    var label: String
     
-    init(label: FIRLabel) {
+    init(label: String) {
         self.label = label
     }
     
@@ -306,7 +379,7 @@ final class FIRJump: FIRTerminator {
     }
 }
 
-protocol FIRLabelRepresentable: FIRNode {
+protocol FIRLabelRepresentable: FIRBasicBlockItem {
 }
 
 final class FIRLabel: FIRLabelRepresentable {

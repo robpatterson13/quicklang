@@ -97,6 +97,14 @@ class AllowsRecursiveDefinition: ASTVisitor {
     ) -> Verdict {
         .yes
     }
+    
+    func visitControlFlowJumpStatement(_ statement: ControlFlowJumpStatement, _ info: Void) -> Verdict {
+        InternalCompilerError.unreachable()
+    }
+    
+    func visitLabelControlFlowStatement(_ statement: LabelControlFlowStatement, _ info: Void) -> Verdict {
+        InternalCompilerError.unreachable()
+    }
 }
 
 class SymbolGrabber: ASTVisitor {
@@ -186,6 +194,14 @@ class SymbolGrabber: ASTVisitor {
         _ info: Void
     ) -> [Binding] {
         return []
+    }
+    
+    func visitControlFlowJumpStatement(_ statement: ControlFlowJumpStatement, _ info: Void) -> [Binding] {
+        InternalCompilerError.unreachable()
+    }
+    
+    func visitLabelControlFlowStatement(_ statement: LabelControlFlowStatement, _ info: Void) -> [Binding] {
+        InternalCompilerError.unreachable()
     }
     
 }
@@ -349,6 +365,14 @@ class BindingCheck: SemaPass, ASTVisitor {
         block.forEach { node in
             node.acceptVisitor(self)
         }
+    }
+    
+    func visitControlFlowJumpStatement(_ statement: ControlFlowJumpStatement, _ info: Void) {
+        InternalCompilerError.unreachable()
+    }
+    
+    func visitLabelControlFlowStatement(_ statement: LabelControlFlowStatement, _ info: Void) {
+        InternalCompilerError.unreachable()
     }
     
 }

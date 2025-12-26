@@ -137,3 +137,25 @@ extension UITextView {
     }
 
 }
+
+final class GenSymInfo: @unchecked Sendable {
+    static let singleton = GenSymInfo()
+    
+    private let lock = NSLock()
+    
+    private var _tag = 0
+    private var tag: Int {
+        get {
+            lock.lock()
+            defer { lock.unlock() }
+            _tag += 1
+            return _tag
+        }
+    }
+    
+    func genSym(root: String, id: UUID?) -> String {
+        return root + "_$\(tag)$"
+    }
+    
+    private init() {}
+}

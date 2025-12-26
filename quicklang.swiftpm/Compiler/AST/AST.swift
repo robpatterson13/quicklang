@@ -297,3 +297,47 @@ final class AssignmentStatement: StatementNode, BlockLevelNode {
     }
     
 }
+
+// used to explicitly pass control flow when we implicitly end some scope
+// for example, an if statement that falls through within a function body:
+// we'd like to jump from the end of the statement to the continuation of
+// the function
+final class ControlFlowJumpStatement: StatementNode, BlockLevelNode {
+    let id: UUID
+    let label: String
+    var scope: ASTScope?
+    
+    init(id: UUID = UUID(), label: String) {
+        self.id = id
+        self.label = label
+    }
+    
+    func acceptVisitor<V: ASTVisitor>(_ visitor: V, _ info: V.VisitorInfo) -> V.VisitorResult {
+        visitor.visitControlFlowJumpStatement(self, info)
+    }
+    
+    func needsContinuationPoint() -> Bool {
+        false
+    }
+    
+}
+
+final class LabelControlFlowStatement: StatementNode, BlockLevelNode {
+    let id: UUID
+    let label: String
+    var scope: ASTScope?
+    
+    init(id: UUID = UUID(), label: String) {
+        self.id = id
+        self.label = label
+    }
+    
+    func acceptVisitor<V: ASTVisitor>(_ visitor: V, _ info: V.VisitorInfo) -> V.VisitorResult {
+        visitor.visitLabelControlFlowStatement(self, info)
+    }
+    
+    func needsContinuationPoint() -> Bool {
+        false
+    }
+    
+}

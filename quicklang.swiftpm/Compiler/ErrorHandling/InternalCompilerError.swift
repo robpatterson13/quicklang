@@ -7,8 +7,12 @@
 
 enum InternalCompilerError {
     
-    static func unreachable(_ message: String) -> Never {
-        terminate(message)
+    static func unreachable(_ message: String? = nil) -> Never {
+        if let message {
+            terminate(message)
+        } else {
+            terminate("This should never be reached")
+        }
     }
     
     private static func terminate(_ message: String) -> Never {

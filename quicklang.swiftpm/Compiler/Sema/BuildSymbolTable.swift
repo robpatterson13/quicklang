@@ -93,4 +93,12 @@ final class BuildSymbolTable: SemaPass {
             $0.acceptVisitor(self)
         }
     }
+    
+    func visitControlFlowJumpStatement(_ statement: ControlFlowJumpStatement, _ info: Void) {
+        InternalCompilerError.unreachable()
+    }
+    
+    func visitLabelControlFlowStatement(_ statement: LabelControlFlowStatement, _ info: Void) {
+        InternalCompilerError.unreachable()
+    }
 }

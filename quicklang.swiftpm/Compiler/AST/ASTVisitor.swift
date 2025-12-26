@@ -63,4 +63,14 @@ protocol ASTVisitor {
         _ statement: AssignmentStatement,
         _ info: VisitorInfo
     ) -> VisitorResult
+    
+    func visitControlFlowJumpStatement(
+        _ statement: ControlFlowJumpStatement,
+        _ info: VisitorInfo
+    ) -> VisitorResult
+    
+    func visitLabelControlFlowStatement(
+        _ statement: LabelControlFlowStatement,
+        _ info: VisitorInfo
+    ) -> VisitorResult
 }

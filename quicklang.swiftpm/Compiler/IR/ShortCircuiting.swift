@@ -59,8 +59,8 @@ final class ShortCircuitingForIfStatementCondition: FIRVisitor {
             }
             
             let labels: ShortCircuitContext = .init(
-                thenLabel: branch.elseBranch.name,
-                elseLabel: branch.thenBranch.name
+                thenLabel: branch.elseBranch,
+                elseLabel: branch.thenBranch
             )
             let result = branch.acceptVisitor(self, labels)
             prologue.append(contentsOf: result.prologue)
@@ -78,13 +78,12 @@ final class ShortCircuitingForIfStatementCondition: FIRVisitor {
     ) -> VisitorResult {
         let context: ShortCircuitContext = .init(
             parentBlockName: GenSymInfo.singleton.genSym(root: "cond_br", id: nil),
-            thenLabel: definition.thenBranch.name,
-            elseLabel: definition.elseBranch.name
+            thenLabel: definition.thenBranch,
+            elseLabel: definition.elseBranch
         )
         let processedCond = definition.condition.acceptVisitor(self, context)
         
-        let label = FIRLabel(name: processedCond.branchToConnectTo)
-        let branch = FIRBranch(label: label.copy())
+        let branch = FIRBranch(label: processedCond.branchToConnectTo)
         
         return .init(terminator: branch, branchToConnectTo: "n/a", prologue: processedCond.prologue)
     }
@@ -149,8 +148,8 @@ final class ShortCircuitingForIfStatementCondition: FIRVisitor {
         
         let newTerminator = FIRConditionalBranch(
             condition: expression,
-            thenBranch: thenBranch,
-            elseBranch: elseBranch
+            thenBranch: thenBranch.name,
+            elseBranch: elseBranch.name
         )
         let gensym = GenSymInfo.singleton.genSym(root: root, id: nil)
         let newBlockName = info.extendParentBlockName(gensym).parentBlockName!

@@ -166,4 +166,12 @@ class BuildScopes: SemaPass {
         }
     }
     
+    func visitControlFlowJumpStatement(_ statement: ControlFlowJumpStatement, _ info: ASTScope) -> WillIntroduceNewDecl {
+        InternalCompilerError.unreachable()
+    }
+    
+    func visitLabelControlFlowStatement(_ statement: LabelControlFlowStatement, _ info: ASTScope) -> WillIntroduceNewDecl {
+        InternalCompilerError.unreachable()
+    }
+    
 }

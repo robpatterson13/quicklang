@@ -105,6 +105,14 @@ class GetAllReturnStatements: ASTVisitor {
         []
     }
     
+    func visitControlFlowJumpStatement(_ statement: ControlFlowJumpStatement, _ info: Void) -> [ReturnStatement] {
+        InternalCompilerError.unreachable()
+    }
+    
+    func visitLabelControlFlowStatement(_ statement: LabelControlFlowStatement, _ info: Void) -> [ReturnStatement] {
+        InternalCompilerError.unreachable()
+    }
+    
 }
 
 class InferType: ASTVisitor {
@@ -200,6 +208,14 @@ class InferType: ASTVisitor {
         _ info: Void
     ) -> TypeName? {
         nil
+    }
+    
+    func visitControlFlowJumpStatement(_ statement: ControlFlowJumpStatement, _ info: Void) -> TypeName? {
+        InternalCompilerError.unreachable()
+    }
+    
+    func visitLabelControlFlowStatement(_ statement: LabelControlFlowStatement, _ info: Void) -> TypeName? {
+        InternalCompilerError.unreachable()
     }
 }
 
@@ -323,6 +339,14 @@ class Typechecker: SemaPass, ASTVisitor {
         if let type {
             checkExpression(statement.expression, is: type, error: .typeMismatchInDefinition(defined: type))
         }
+    }
+    
+    func visitControlFlowJumpStatement(_ statement: ControlFlowJumpStatement, _ info: Void) {
+        InternalCompilerError.unreachable()
+    }
+    
+    func visitLabelControlFlowStatement(_ statement: LabelControlFlowStatement, _ info: Void) {
+        InternalCompilerError.unreachable()
     }
     
 }

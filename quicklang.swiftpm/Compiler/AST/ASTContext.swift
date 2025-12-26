@@ -93,6 +93,14 @@ class IsGlobalSymbol: ASTVisitor {
     ) -> ASTScope.IntroducedBinding? {
         nil
     }
+    
+    func visitControlFlowJumpStatement(_ statement: ControlFlowJumpStatement, _ info: Void) -> ASTScope.IntroducedBinding? {
+        InternalCompilerError.unreachable()
+    }
+    
+    func visitLabelControlFlowStatement(_ statement: LabelControlFlowStatement, _ info: Void) -> ASTScope.IntroducedBinding? {
+        InternalCompilerError.unreachable()
+    }
 }
 
 class ASTContext {

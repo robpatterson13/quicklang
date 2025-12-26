@@ -31,7 +31,7 @@ class Compiler {
     private var parser: Parser?
     private var desugarer: Desugar?
     private var sema: Sema?
-    private var lowerToFIR: ConvertToRawFIR?
+    private var lowerToFIR: GenerateFIR?
     
     private let errorManager: CompilerErrorManager
     
@@ -90,7 +90,7 @@ class Compiler {
             return
         }
         
-        let loweringResult: ConvertToRawFIR.SuccessfulResult
+        let loweringResult: GenerateFIR.SuccessfulResult
         switch startLowering(parseResult, settings: settings) {
         case .success(result: let result):
             for node in result.nodes {
@@ -139,9 +139,9 @@ class Compiler {
         return sema!.begin(input)
     }
     
-    private func startLowering(_ context: ASTContext, settings: DriverSettings) -> PhaseResult<ConvertToRawFIR> {
+    private func startLowering(_ context: ASTContext, settings: DriverSettings) -> PhaseResult<GenerateFIR> {
         if lowerToFIR == nil {
-            lowerToFIR = ConvertToRawFIR(errorManager: errorManager, settings: settings)
+            lowerToFIR = GenerateFIR(errorManager: errorManager, settings: settings)
         }
         
         let result = lowerToFIR!.begin(context)
