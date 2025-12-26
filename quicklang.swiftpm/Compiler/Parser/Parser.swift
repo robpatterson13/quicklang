@@ -662,12 +662,18 @@ final class Parser: CompilerPhase {
         case right
     }
     let operatorInfoMap: [Token: OperatorInfo] = [
-        .NOT:   (5, .right),
-        .STAR:  (4, .left),
-        .PLUS:  (3, .left),
-        .MINUS: (3, .left),
-        .AND:   (2, .left),
-        .OR:    (1, .left)
+        .NOT:      (7, .right),
+        .STAR:     (6, .left),
+        .PLUS:     (5, .left),
+        .MINUS:    (5, .left),
+        .GT:       (4, .left),
+        .GTE:      (4, .left),
+        .LT:       (4, .left),
+        .LTE:      (4, .left),
+        .EQUALTO:  (3, .left),
+        .NEQUALTO: (3, .left),
+        .AND:      (2, .left),
+        .OR:       (1, .left)
     ]
     
     private func parseAtom() -> any RawExpressionNode {

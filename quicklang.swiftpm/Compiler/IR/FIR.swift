@@ -236,6 +236,10 @@ enum FIROperation {
     case plus
     case minus
     case times
+    case gt
+    case gte
+    case lt
+    case lte
     
     static func from(op: UnaryOperator) -> FIROperation {
         switch op {
@@ -258,6 +262,14 @@ enum FIROperation {
             return .and
         case .or:
             return .or
+        case .gt:
+            return .gt
+        case .gte:
+            return .gte
+        case .lt:
+            return .lt
+        case .lte:
+            return .lte
         }
     }
 }

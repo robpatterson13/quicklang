@@ -249,7 +249,12 @@ final class GenerateFIR: CompilerPhase, ASTVisitor {
             )
             
             if canLetBindBinaryExpression {
-                let result = (expression: binaryOperation, bindings: bindings)
+                let boundName = GenSymInfo.singleton.genSym(root: "let_bin_op", id: nil)
+                let boundExpression = FIRAssignment(name: boundName, value: binaryOperation)
+                let boundIdentifier = FIRIdentifier(name: boundName)
+                bindings.append(boundExpression)
+                
+                let result = (expression: boundIdentifier, bindings: bindings)
                 return .expressionVisit(result)
                 
             } else {
@@ -277,7 +282,7 @@ final class GenerateFIR: CompilerPhase, ASTVisitor {
                 lhsInfo
             ).unwrapExpressionVisit()
             
-            let (rhsExpression, rhsBindings) = operation.lhs.acceptVisitor(
+            let (rhsExpression, rhsBindings) = operation.rhs.acceptVisitor(
                 self,
                 info.notOkayToLetBind()
             ).unwrapExpressionVisit()
@@ -552,13 +557,18 @@ final class GenerateFIR: CompilerPhase, ASTVisitor {
         
         if builder.isNew() {
             return blocks
+            
         } else if let terminators = builder.onlyTerminators() {
             let lastBlock = blocks.last!
             for terminator in terminators {
                 lastBlock.addUnreachableTerminator(terminator)
             }
             return blocks
+            
         } else {
+            // let's synthesize a void return
+            let branch = FIRBranch(label: info.returnBranchName!, value: FIREmptyTuple())
+            builder.addTerminator(branch)
             let block = builder.build()
             blocks.append(block)
             return blocks

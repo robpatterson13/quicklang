@@ -71,6 +71,11 @@ enum BinaryOperator {
     case and
     case or
     
+    case gt
+    case gte
+    case lt
+    case lte
+    
     var isBoolean: Bool {
         switch self {
         case .and, .or:
@@ -87,6 +92,10 @@ enum BinaryOperator {
         case .PLUS: return .plus
         case .MINUS: return .minus
         case .STAR: return .times
+        case .GT: return .gt
+        case .GTE: return .gte
+        case .LT: return .lt
+        case .LTE: return .lte
         default:
             return nil
         }

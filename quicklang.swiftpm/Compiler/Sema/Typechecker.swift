@@ -163,7 +163,7 @@ class InferType: ASTVisitor {
         switch operation.op {
         case .plus, .times, .minus:
             return .Int
-        case .and, .or:
+        case .and, .or, .gt, .gte, .lt, .lte:
             return .Bool
         }
     }
@@ -276,7 +276,7 @@ class Typechecker: SemaPass, ASTVisitor {
     
     func visitBinaryOperation(_ operation: BinaryOperation, _ info: Void) {
         switch operation.op {
-        case .plus, .minus, .times:
+        case .plus, .minus, .times, .gt, .gte, .lt, .lte:
             let error = TypecheckerErrorType.operatorTypeMismatch(defined: .Int)
             checkExpression(operation.lhs, is: .Int, error: error)
             checkExpression(operation.rhs, is: .Int, error: error)

@@ -59,15 +59,6 @@ enum Token {
         }
     }
     
-    func isOp() -> Bool {
-        switch self {
-        case .Symbol(let s, _):
-            return Self.isSymbolOp(s)
-        default:
-            return false
-        }
-    }
-    
     func isUnaryOp() -> Bool {
         switch self {
         case .NOT: // add minus
@@ -83,21 +74,11 @@ enum Token {
                 .MINUS,
                 .STAR,
                 .AND,
-                .OR:
-            return true
-        default:
-            return false
-        }
-    }
-    
-    private static func isSymbolOp(_ symbol: String) -> Bool {
-        switch symbol {
-        case Token.PLUS.value,
-            Token.MINUS.value,
-            Token.STAR.value,
-            Token.AND.value,
-            Token.OR.value,
-            Token.NOT.value:
+                .OR,
+                .GT,
+                .LT,
+                .GTE,
+                .LTE:
             return true
         default:
             return false
@@ -128,6 +109,13 @@ extension Token {
     static let ARROW: Token = .buildSymbol("->")
     static let COMMA: Token = .buildSymbol(",")
     static let EQUAL: Token = .buildSymbol("=")
+    
+    static let LT: Token = .buildSymbol("<")
+    static let LTE: Token = .buildSymbol("<=")
+    static let GT: Token = .buildSymbol(">")
+    static let GTE: Token = .buildSymbol(">=")
+    static let EQUALTO: Token = .buildSymbol("==")
+    static let NEQUALTO: Token = .buildSymbol("!=")
     
     static let NEWLINE: Token = .buildSymbol("\n")
     

@@ -81,6 +81,14 @@ class ConvertToDisplayableNode: RawASTVisitor {
             case .times: return "*"
             case .and: return "and"
             case .or: return "or"
+            case .gt:
+                return ">"
+            case .gte:
+                return ">="
+            case .lt:
+                return "<"
+            case .lte:
+                return "<="
             }
         }()
         return DisplayableNode(id: operation.id, name: "Binary Operation", description: opDescription, children: [displayLhs, displayRhs])
