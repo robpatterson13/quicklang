@@ -29,17 +29,7 @@ struct ShortCircuitInfo {
 }
 
 enum ShortCircuitResult {
-    case subexpression(any FIRExpression, [FIRAssignment])
     case branch(FIRConditionalBranch, [FIRBasicBlock])
-    
-    func unwrapSubexpression() -> (any FIRExpression, [FIRAssignment]) {
-        switch self {
-        case .subexpression(let expression, let bindings):
-            return (expression, bindings)
-        @unknown default:
-            InternalCompilerError.unreachable("Can't unwrap non-expression as expression")
-        }
-    }
     
     func unwrapBranch() -> (FIRConditionalBranch, [FIRBasicBlock]) {
         switch self {
@@ -134,12 +124,7 @@ final class ShortCircuitingForIfStatementCondition: FIRVisitor {
             return .branch(newBranch, newBlocks)
         }
         
-        let (newSubexpr, newPrologue) = operation.expr.acceptVisitor(self, info).unwrapSubexpression()
-        let newBoundExpr = FIRUnaryExpression(op: operation.op, expr: newSubexpr)
-        let newBinding = GenSymInfo.singleton.genSym(root: "un_op_subexpr", id: nil)
-        let newAssignment = FIRAssignment(name: newBinding, value: newBoundExpr)
-        let newIdentifier = FIRIdentifier(name: newBinding)
-        return .subexpression(newIdentifier, newPrologue + [newAssignment])
+        InternalCompilerError.unreachable()
     }
     
     func visitFIRBinaryExpression(
