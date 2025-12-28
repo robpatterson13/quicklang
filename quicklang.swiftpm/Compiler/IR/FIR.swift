@@ -19,11 +19,12 @@ protocol FIRNode {
 }
 
 protocol FIRTerminator: FIRNode {
-    
+    func visitDuringValueProducingBooleanExpansion() -> Bool
 }
 
 protocol FIRBasicBlockItem: FIRNode {
-    
+    func visitDuringValueProducingBooleanExpansion() -> Bool
+    func needsJoinBlock() -> Bool
 }
 
 enum FIRType {
@@ -52,6 +53,16 @@ final class FIRFunction {
     var blocks: [FIRBasicBlock]
     var parameters: [FIRParameter]?
     
+    var returnBlock: FIRBasicBlock? {
+        for block in blocks {
+            if block.terminator is FIRReturn {
+                return block
+            }
+        }
+        
+        return nil
+    }
+    
     init(blocks: [FIRBasicBlock], parameters: [FIRParameter]? = nil) {
         self.blocks = blocks
         self.parameters = parameters
@@ -60,9 +71,9 @@ final class FIRFunction {
 
 final class FIRParameter {
     var name: String
-    var type: FIRType
+    var type: FIRType?
     
-    init(name: String, type: FIRType) {
+    init(name: String, type: FIRType? = nil) {
         self.name = name
         self.type = type
     }
@@ -334,8 +345,16 @@ final class FIRAssignment: FIRBasicBlockItem {
         visitor.visitFIRAssignment(self, info)
     }
     
+    func visitDuringValueProducingBooleanExpansion() -> Bool {
+        value is FIRUnaryExpression || value is FIRBinaryExpression
+    }
+    
     func copy() -> Self {
         .init(name: name, value: value)
+    }
+    
+    func needsJoinBlock() -> Bool {
+        true
     }
 }
 
@@ -363,6 +382,10 @@ final class FIRConditionalBranch: FIRTerminator {
     func copy() -> Self {
         .init(condition: condition, thenBranch: thenBranch, elseBranch: elseBranch)
     }
+    
+    func visitDuringValueProducingBooleanExpansion() -> Bool {
+        false
+    }
 }
 
 final class FIRBranch: FIRTerminator {
@@ -382,6 +405,10 @@ final class FIRBranch: FIRTerminator {
     func copy() -> Self {
         .init(label: label, value: value)
     }
+    
+    func visitDuringValueProducingBooleanExpansion() -> Bool {
+        false
+    }
 }
 
 final class FIRJump: FIRTerminator {
@@ -397,6 +424,10 @@ final class FIRJump: FIRTerminator {
     
     func copy() -> Self {
         .init(label: label)
+    }
+    
+    func visitDuringValueProducingBooleanExpansion() -> Bool {
+        false
     }
 }
 
@@ -418,8 +449,16 @@ final class FIRLabel: FIRLabelRepresentable {
         .init(name: name)
     }
     
+    func visitDuringValueProducingBooleanExpansion() -> Bool {
+        false
+    }
+    
     func acceptVisitor<V: FIRVisitor>(_ visitor: V, _ info: V.VisitorInfo) -> V.VisitorResult {
         visitor.visitFIRLabel(self, info)
+    }
+    
+    func needsJoinBlock() -> Bool {
+        false
     }
 }
 
@@ -432,6 +471,14 @@ final class FIRLabelHole: FIRLabelRepresentable {
     func copy() -> Self {
         .init()
     }
+    
+    func visitDuringValueProducingBooleanExpansion() -> Bool {
+        fatalError("Cannot visit label hole")
+    }
+    
+    func needsJoinBlock() -> Bool {
+        false
+    }
 }
 
 final class FIRReturn: FIRTerminator {
@@ -439,6 +486,10 @@ final class FIRReturn: FIRTerminator {
     
     init(value: FIRExpression) {
         self.value = value
+    }
+    
+    func visitDuringValueProducingBooleanExpansion() -> Bool {
+        value is FIRUnaryExpression || value is FIRBinaryExpression
     }
     
     func acceptVisitor<V: FIRVisitor>(_ visitor: V, _ info: V.VisitorInfo) -> V.VisitorResult {
@@ -459,11 +510,20 @@ final class FIRFunctionCall: FIRExpression, FIRBasicBlockItem {
         self.parameter = parameter
     }
     
+    // this happens in a later pass
+    func visitDuringValueProducingBooleanExpansion() -> Bool {
+        false
+    }
+    
     func acceptVisitor<V: FIRVisitor>(_ visitor: V, _ info: V.VisitorInfo) -> V.VisitorResult {
         visitor.visitFIRFunctionCall(self, info)
     }
     
     func copy() -> Self {
         .init(function: function, parameter: parameter)
+    }
+    
+    func needsJoinBlock() -> Bool {
+        false
     }
 }

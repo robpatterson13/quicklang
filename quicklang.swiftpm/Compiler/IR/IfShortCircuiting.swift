@@ -1,5 +1,5 @@
 //
-//  ShortCircuiting.swift
+//  IfShortCircuiting.swift
 //  quicklang
 //
 //  Created by Rob Patterson on 12/20/25.
@@ -137,7 +137,7 @@ final class ShortCircuitingForIfStatementCondition: FIRVisitor {
             
             let (rhsBranch, rhsBlocks) = operation.rhs.acceptVisitor(self, info).unwrapBranch()
             
-            let midName = GenSymInfo.singleton.genSym(root: "short_circuit_mid", id: nil)
+            let midName = GenSymInfo.singleton.genSym(root: "short_circuit_mid")
             let thenLabel = operation.op == .and ? midName : thnBranch
             let elseLabel = operation.op == .and ? elsBranch : midName
             

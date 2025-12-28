@@ -526,7 +526,8 @@ final class Parser: CompilerPhase {
             return .incomplete
         }
         
-        let node = RawReturnStatement(expression: parseExpression(min: 0))
+        let expression = parseExpression()
+        let node = RawReturnStatement(expression: expression)
         
         let recoverFromSemicolonMissing = consume(.SEMICOLON, else: .expectedSemicolonToEndStatement(of: .return))
         if let recoverFromSemicolonMissing {
@@ -697,7 +698,7 @@ final class Parser: CompilerPhase {
             return RawUnaryOperation(op: .from(token: currentTokenPeeked)!, expression: value)
             
         } else {
-            switch tokens.next() {
+            switch tokens.peekNext() {
             case let .Identifier(id, _):
                 if let maybeParen = tokens.peek(ahead: 2), maybeParen == .LPAREN {
                     return parseFunctionApplication()
@@ -706,9 +707,11 @@ final class Parser: CompilerPhase {
                 }
                 
             case let .Number(n, _):
+                tokens.burn()
                 return RawNumberExpression(value: Int(n)!)
                 
             case let .Boolean(b, _):
+                tokens.burn()
                 return RawBooleanExpression(value: Bool(b)!)
                 
             default:
@@ -719,7 +722,7 @@ final class Parser: CompilerPhase {
         }
     }
     
-    private func parseExpression(min: Int) -> any RawExpressionNode {
+    private func parseExpression(min: Int = 0) -> any RawExpressionNode {
         var atomLhs: any RawExpressionNode = parseAtom()
         
         while true {
@@ -864,7 +867,7 @@ final class Parser: CompilerPhase {
         var expressions: [any RawExpressionNode] = []
         
         while let nextToken = tokens.peekNext(), nextToken != .RPAREN {
-            let argument = parseFunctionApplicationArgument()
+            let argument = parseExpression()
             if argument.isIncomplete {
                 return .incomplete
             }

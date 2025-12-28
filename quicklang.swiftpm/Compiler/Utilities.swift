@@ -153,7 +153,7 @@ final class GenSymInfo: @unchecked Sendable {
         }
     }
     
-    func genSym(root: String, id: UUID?) -> String {
+    func genSym(root: String, id: UUID? = nil) -> String {
         return root + "_$\(tag)$"
     }
     

@@ -79,6 +79,8 @@ final class GenerateFIR: CompilerPhase, ASTVisitor {
     var errorManager: CompilerErrorManager?
     
     let shortCircuitingForIfStatementCondition = ShortCircuitingForIfStatementCondition()
+    let booleanAssignmentShortCircuiting = BooleanAssignmentShortCircuiting()
+    let arithmeticLinearize = FIRArithmeticLinearize()
     
     init(errorManager: CompilerErrorManager, settings: DriverSettings) {
         self.errorManager = errorManager
@@ -101,6 +103,8 @@ final class GenerateFIR: CompilerPhase, ASTVisitor {
         
         let module = FIRModule(nodes: nodes)
         shortCircuitingForIfStatementCondition.begin(module)
+        booleanAssignmentShortCircuiting.begin(module)
+        arithmeticLinearize.begin(module)
         return .success(result: module)
     }
     
@@ -464,15 +468,12 @@ final class GenerateFIR: CompilerPhase, ASTVisitor {
         _ info: GenerateFIRVisitorInfo
     ) -> GenerateFIRVisitorResult {
         
-        let value = statement.expression.acceptVisitor(self, info.okayToLetBind())
+        let value = statement.expression.acceptVisitor(self, info.okayToLetBind().asExpression())
         switch value {
-        case .expressionVisit((let expression, let bindings)):
+        case .expressionVisit((let expression, let bindings)),
+                .notSafeToLetBind((let expression, let bindings)):
             let branch = FIRBranch(label: info.returnBranchName!, value: expression)
             return .terminator(branch, bindings)
-            
-        case .notSafeToLetBind((let expression, let bindings)):
-            let returnTerminator = FIRReturn(value: expression)
-            return .terminator(returnTerminator, bindings)
             
         default:
             InternalCompilerError.unreachable("Not possible")
